@@ -2,19 +2,26 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>RAR / LZH / 7z → ZIP 変換</title>
+  <title>RAR / LZH / 7z → ZIP 変換（iPad対応）</title>
 
   <!-- ZIP 作成用 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-  <!-- 7zip-wasm -->
-  <script src="https://cdn.jsdelivr.net/npm/7zip-wasm@2.0.0/dist/7zip.min.js"></script>
+  <!-- RAR 解凍用 -->
+  <script src="https://cdn.jsdelivr.net/npm/unrar-js@0.2.19/dist/unrar.min.js"></script>
+
+  <!-- LZH 解凍用 -->
+  <script src="https://cdn.jsdelivr.net/npm/lha@1.0.0/lha.min.js"></script>
+
+  <!-- 7z 解凍用（JS版） -->
+  <script src="https://cdn.jsdelivr.net/npm/7zdec@1.0.0/7zdec.min.js"></script>
+
 </head>
 <body>
-  <h1>RAR / LZH / 7z → ZIP 変換</h1>
+  <h2>RAR / LZH / 7z → ZIP 変換（iPad対応）</h2>
 
   <input type="file" id="file" accept=".rar,.lzh,.7z">
-  <button onclick="convert()">変換して ZIP をダウンロード</button>
+  <button onclick="convert()">ZIP に変換</button>
 
   <script>
     async function convert() {
@@ -23,27 +30,42 @@
 
       const arrayBuffer = await file.arrayBuffer();
       const zip = new JSZip();
+      const name = file.name.toLowerCase();
 
-      // 7zip-wasm 初期化
-      const SevenZip = await window.SevenZip.ready;
+      // --- RAR ---
+      if (name.endsWith(".rar")) {
+        const extractor = await unrar.createExtractorFromData({ data: arrayBuffer });
+        const list = extractor.getFileList().fileHeaders;
 
-      // メモリ上に仮想ファイルとして置く
-      SevenZip.FS.writeFile("/input", new Uint8Array(arrayBuffer));
-
-      // 解凍コマンド
-      const result = SevenZip.run(["x", "/input", "-o/output", "-y"]);
-
-      // 出力されたファイル一覧を取得
-      const files = SevenZip.FS.readdir("/output");
-
-      for (const name of files) {
-        if (name === "." || name === "..") continue;
-
-        const data = SevenZip.FS.readFile("/output/" + name);
-        zip.file(name, data);
+        for (const header of list) {
+          const extracted = extractor.extractFiles([header.name]);
+          const fileData = extracted.files[header.name].extract[0].fileData;
+          zip.file(header.name, fileData);
+        }
       }
 
-      // ZIP を生成
+      // --- LZH ---
+      else if (name.endsWith(".lzh")) {
+        const files = LHA.decompress(arrayBuffer);
+        files.forEach(f => {
+          zip.file(f.filename, f.data);
+        });
+      }
+
+      // --- 7z ---
+      else if (name.endsWith(".7z")) {
+        const archive = new SevenZip(arrayBuffer);
+        const entries = archive.getEntries();
+
+        for (const entry of entries) {
+          if (!entry.isDirectory) {
+            const data = archive.readFile(entry);
+            zip.file(entry.name, data);
+          }
+        }
+      }
+
+      // ZIP を生成してダウンロード
       const zipBlob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(zipBlob);
 
