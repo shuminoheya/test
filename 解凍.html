@@ -2,61 +2,54 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>RAR / LZH → ZIP 変換</title>
+  <title>RAR / LZH / 7z → ZIP 変換</title>
 
   <!-- ZIP 作成用 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-  <!-- RAR 解凍用（unrar.js） -->
-  <script src="https://cdn.jsdelivr.net/npm/unrar.js@latest/unrar.js"></script>
-
-  <!-- LZH 解凍用（lzh.js） -->
-  <script src="https://cdn.jsdelivr.net/npm/lzh.js/dist/lzh.min.js"></script>
+  <!-- 7zip-wasm -->
+  <script src="https://cdn.jsdelivr.net/npm/7zip-wasm@2.0.0/dist/7zip.min.js"></script>
 </head>
 <body>
-  <h1>RAR / LZH → ZIP 変換</h1>
+  <h1>RAR / LZH / 7z → ZIP 変換</h1>
 
-  <select id="type">
-    <option value="rar">RAR</option>
-    <option value="lzh">LZH</option>
-  </select>
-
-  <input type="file" id="file" accept=".rar,.lzh">
+  <input type="file" id="file" accept=".rar,.lzh,.7z">
   <button onclick="convert()">変換して ZIP をダウンロード</button>
 
   <script>
     async function convert() {
-      const type = document.getElementById("type").value;
       const file = document.getElementById("file").files[0];
       if (!file) return alert("ファイルを選択してください");
 
       const arrayBuffer = await file.arrayBuffer();
       const zip = new JSZip();
 
-      if (type === "rar") {
-        const extractor = await Unrar.createExtractorFromData({ data: arrayBuffer });
-        const list = extractor.getFileList().fileHeaders;
+      // 7zip-wasm 初期化
+      const SevenZip = await window.SevenZip.ready;
 
-        for (const header of list) {
-          const extracted = extractor.extractFiles([header.name]);
-          const fileData = extracted.files[header.name].extract[0].fileData;
-          zip.file(header.name, fileData);
-        }
+      // メモリ上に仮想ファイルとして置く
+      SevenZip.FS.writeFile("/input", new Uint8Array(arrayBuffer));
+
+      // 解凍コマンド
+      const result = SevenZip.run(["x", "/input", "-o/output", "-y"]);
+
+      // 出力されたファイル一覧を取得
+      const files = SevenZip.FS.readdir("/output");
+
+      for (const name of files) {
+        if (name === "." || name === "..") continue;
+
+        const data = SevenZip.FS.readFile("/output/" + name);
+        zip.file(name, data);
       }
 
-      if (type === "lzh") {
-        const files = LZH.decompress(arrayBuffer);
-        files.forEach(f => {
-          zip.file(f.filename, f.data);
-        });
-      }
-
+      // ZIP を生成
       const zipBlob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(zipBlob);
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = file.name.replace(/\.(rar|lzh)$/i, ".zip");
+      a.download = file.name.replace(/\.(rar|lzh|7z)$/i, ".zip");
       a.click();
     }
   </script>
