@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>URLアクセスボタン</title>
+<style>
+  #goBtn {
+    display: none; /* 最初は非表示 */
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h3>URLを入力してください</h3>
+
+<input type="text" id="urlInput" placeholder="https://example.com" size="40">
+<button id="goBtn">アクセス</button>
+
+<script>
+  const input = document.getElementById("urlInput");
+  const btn = document.getElementById("goBtn");
+
+  // 入力されたらボタンを表示
+  input.addEventListener("input", () => {
+    btn.style.display = input.value.trim() ? "inline-block" : "none";
+  });
+
+  // ボタンクリックでURLへ移動
+  btn.addEventListener("click", () => {
+    let url = input.value.trim();
+
+    // http/https が無い場合は自動で付ける
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      url = "https://" + url;
+    }
+
+    window.location.href = url;
+  });
+</script>
+
+</body>
+</html>
