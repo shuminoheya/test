@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>取得したファイルを a タグとして表示</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 16px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      margin: 6px 0 10px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #181818;
+      color: #eee;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 8px 16px;
+      border-radius: 4px;
+      border: none;
+      background: #1e88e5;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .message {
+      font-size: 13px;
+      min-height: 18px;
+      margin-top: 6px;
+      color: #ccc;
+    }
+    .files {
+      margin-top: 24px;
+      border-top: 1px solid #333;
+      padding-top: 12px;
+    }
+    .file-item {
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .file-item a {
+      color: #4fc3f7;
+      text-decoration: none;
+    }
+    .file-item a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>このスクリプトが取得したファイルを a タグで表示</h1>
+
+    <p style="font-size:13px; color:#ccc;">
+      下の URL にアクセスし、fetch で取得したデータをローカルの Blob URL にして、
+      ダウンロード用の a タグを生成します。<br>
+      ※ 同一オリジンか CORS 許可された URL でのみ動作します。
+    </p>
+
+    <input
+      id="file-url"
+      type="text"
+      placeholder="例: https://example.com/sample.png など"
+    />
+    <button id="fetch-btn">この URL のデータを取得</button>
+    <div id="message" class="message"></div>
+
+    <div class="files">
+      <h2 style="font-size:16px;">このタブのスクリプトが取得したファイル</h2>
+      <div id="file-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const urlInput = document.getElementById("file-url");
+    const fetchBtn = document.getElementById("fetch-btn");
+    const messageEl = document.getElementById("message");
+    const fileListEl = document.getElementById("file-list");
+
+    function setMessage(text, isError = false) {
+      messageEl.textContent = text || "";
+      messageEl.style.color = isError ? "#ff6b6b" : "#ccc";
+    }
+
+    function addFileLink(name, blob) {
+      const url = URL.createObjectURL(blob);
+      const div = document.createElement("div");
+      div.className = "file-item";
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name || "download";
+      a.textContent = `ダウンロード: ${name}`;
+
+      div.appendChild(a);
+      fileListEl.appendChild(div);
+    }
+
+    async function fetchFile() {
+      const input = urlInput.value.trim();
+      if (!input) {
+        setMessage("URL を入力してください。", true);
+        return;
+      }
+
+      setMessage("取得中...", false);
+
+      try {
+        const response = await fetch(input);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const contentType = response.headers.get("Content-Type") || "";
+        const blob = await response.blob();
+
+        // ファイル名を URL からそこそこ推測
+        const urlObj = new URL(input, location.href);
+        const path = urlObj.pathname;
+        const fallbackName = "download";
+        const guessedName = path.split("/").filter(Boolean).pop() || fallbackName;
+
+        addFileLink(guessedName, blob);
+        setMessage(`取得成功: ${guessedName} (${contentType})`, false);
+      } catch (err) {
+        console.error(err);
+        setMessage("取得に失敗しました。CORS 制限や URL の誤りの可能性があります。", true);
+      }
+    }
+
+    fetchBtn.addEventListener("click", fetchFile);
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") fetchFile();
+    });
+  </script>
+</body>
+</html>
