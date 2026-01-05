@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube URL から自動埋め込み</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 16px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+    label {
+      font-size: 14px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      margin: 6px 0 10px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #181818;
+      color: #eee;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 8px 16px;
+      border-radius: 4px;
+      border: none;
+      background: #1e88e5;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .message {
+      font-size: 13px;
+      color: #ccc;
+      margin-top: 6px;
+      min-height: 18px;
+    }
+    .player-wrapper {
+      margin-top: 20px;
+      position: relative;
+      padding-top: 56.25%; /* 16:9 */
+      background: #000;
+      display: none;
+    }
+    .player-wrapper iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .video-id {
+      font-size: 13px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+    code {
+      background: #222;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>YouTube URL からビデオ ID を取得して埋め込み</h1>
+
+    <label for="yt-url">YouTube の URL を入力：</label>
+    <input
+      id="yt-url"
+      type="text"
+      placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX または https://youtu.be/XXXXXXXXXXX など"
+    />
+    <button id="load-btn">読み込む</button>
+
+    <div class="message" id="message"></div>
+    <div class="video-id" id="video-id"></div>
+
+    <div class="player-wrapper" id="player-wrapper">
+      <iframe
+        id="player"
+        src=""
+        title="YouTube video player"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </div>
+
+  <script>
+    const urlInput = document.getElementById("yt-url");
+    const loadBtn = document.getElementById("load-btn");
+    const messageEl = document.getElementById("message");
+    const videoIdEl = document.getElementById("video-id");
+    const playerWrapper = document.getElementById("player-wrapper");
+    const playerIframe = document.getElementById("player");
+
+    /**
+     * YouTube URL から videoId を抽出する
+     * 対応例:
+     * - https://www.youtube.com/watch?v=VIDEO_ID
+     * - https://youtu.be/VIDEO_ID
+     * - https://www.youtube.com/embed/VIDEO_ID
+     * - パラメータ付き (t=, list= など) も許容
+     */
+    function extractYouTubeVideoId(input) {
+      if (!input) return null;
+      const trimmed = input.trim();
+
+      // もし純粋な ID だけ入れてきた場合（11文字程度の英数/記号）
+      const simpleIdPattern = /^[a-zA-Z0-9_-]{6,}$/;
+      if (!trimmed.includes("://") && simpleIdPattern.test(trimmed)) {
+        return trimmed;
+      }
+
+      let url;
+      try {
+        url = new URL(trimmed);
+      } catch (e) {
+        // プロトコル省略パターンを救済 (www.youtube.com/watch?v=...)
+        try {
+          url = new URL("https://" + trimmed);
+        } catch (e2) {
+          return null;
+        }
+      }
+
+      const hostname = url.hostname.replace(/^www\./, "");
+
+      // youtu.be 短縮 URL
+      if (hostname === "youtu.be") {
+        const id = url.pathname.replace(/^\//, "").split("/")[0];
+        return id || null;
+      }
+
+      // youtube.com 系
+      if (
+        hostname === "youtube.com" ||
+        hostname === "m.youtube.com" ||
+        hostname === "music.youtube.com"
+      ) {
+        // /watch?v=VIDEO_ID
+        if (url.pathname === "/watch") {
+          const v = url.searchParams.get("v");
+          return v || null;
+        }
+
+        // /embed/VIDEO_ID
+        if (url.pathname.startsWith("/embed/")) {
+          const id = url.pathname.split("/")[2];
+          return id || null;
+        }
+
+        // /shorts/VIDEO_ID
+        if (url.pathname.startsWith("/shorts/")) {
+          const id = url.pathname.split("/")[2] || url.pathname.split("/")[1];
+          return id || null;
+        }
+      }
+
+      return null;
+    }
+
+    function setMessage(text, isError = false) {
+      messageEl.textContent = text || "";
+      messageEl.style.color = isError ? "#ff6b6b" : "#ccc";
+    }
+
+    function updatePlayer() {
+      const input = urlInput.value;
+      const videoId = extractYouTubeVideoId(input);
+
+      if (!videoId) {
+        setMessage("有効な YouTube URL またはビデオ ID を入力してください。", true);
+        videoIdEl.textContent = "";
+        playerWrapper.style.display = "none";
+        playerIframe.src = "";
+        return;
+      }
+
+      const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?enablejsapi=1`;
+
+      playerIframe.src = embedUrl;
+      playerWrapper.style.display = "block";
+      setMessage("ビデオを読み込みました。", false);
+      videoIdEl.innerHTML = `取得したビデオID: <code>${videoId}</code>`;
+    }
+
+    loadBtn.addEventListener("click", updatePlayer);
+
+    // Enter キーでも発火
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        updatePlayer();
+      }
+    });
+  </script>
+</body>
+</html>
