@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>WebRTC QR＋テキスト＋通話＋ファイルチャット</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 16px;
+      background: #f5f5f5;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .section {
+      background: #fff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    textarea {
+      width: 100%;
+      height: 120px;
+      box-sizing: border-box;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 6px 12px;
+      margin: 4px 4px 4px 0;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      background: #1976d2;
+      color: white;
+      font-size: 14px;
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: default;
+    }
+    #chat-area {
+      height: 160px;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      padding: 6px;
+      overflow-y: auto;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    .chat-self { color: #1976d2; }
+    .chat-peer { color: #2e7d32; }
+    #log {
+      width: 100%;
+      height: 160px;
+      background: #111;
+      color: #0f0;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    #file-log {
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    video {
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid #444;
+    }
+  </style>
+
+  <!-- QRコード生成 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- QRコード読み取り -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+
+<h1>WebRTC QR＋テキスト＋通話＋ファイルチャット</h1>
+
+<div class="section">
+  <label><b>パスワード（2人で同じものを使う）:</b></label>
+  <input type="text" id="password" placeholder="例: secret123">
+
+  <label><input type="radio" name="role" value="host" checked> ホスト</label>
+  <label><input type="radio" name="role" value="guest"> ゲスト</label>
+
+  <div style="margin-top:8px;">
+    <button id="btn-host-start">ホストとして部屋を作る</button>
+    <button id="btn-guest-start">ゲストとして参加する</button>
+    <button id="btn-start-scan" disabled>QR読み取り開始</button>
+    <button id="btn-stop-scan" disabled>QR読み取り停止</button>
+  </div>
+
+  <div id="status">状態: <span id="status-text">未接続</span></div>
+</div>
+
+<div class="section">
+  <h2>ホスト側 QR</h2>
+  <div id="qrcode-host"></div>
+</div>
+
+<div class="section">
+  <h2>ゲスト側 QR</h2>
+  <div id="qrcode-guest"></div>
+</div>
+
+<div class="section">
+  <h2>QR読み取り</h2>
+  <div id="html5-qrcode"></div>
+</div>
+
+<div class="section">
+  <h2>テキスト接続（手動シグナリング）</h2>
+
+  <h3>受信したテキストを貼り付け</h3>
+  <textarea id="text-input" placeholder='{"v":1,"role":"host","kind":"offer",...} を貼り付け'></textarea>
+  <button id="btn-apply-text">適用</button>
+
+  <h3>自分のシグナリング情報</h3>
+  <textarea id="text-output" readonly></textarea>
+</div>
+
+<div class="section">
+  <h2>チャット</h2>
+  <div id="chat-area"></div>
+  <input type="text" id="chat-input" placeholder="メッセージを入力" disabled>
+  <button id="chat-send" disabled>送信</button>
+</div>
+
+<div class="section">
+  <h2>音声・ビデオ通話</h2>
+  <button id="btn-start-audio" disabled>音声通話開始</button>
+  <button id="btn-start-video" disabled>ビデオ通話開始</button>
+  <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:200px;">
+      <div>自分</div>
+      <video id="localVideo" autoplay playsinline muted style="width:100%; max-width:360px; height:auto;"></video>
+    </div>
+    <div style="flex:1; min-width:200px;">
+      <div>相手</div>
+      <video id="remoteVideo" autoplay playsinline style="width:100%; max-width:360px; height:auto;"></video>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>ファイル転送</h2>
+  <input type="file" id="file-input">
+  <button id="btn-send-file" disabled>ファイル送信</button>
+  <div id="file-log"></div>
+</div>
+
+<div class="section">
+  <h2>ログ</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+/* === 要素取得 === */
+const passwordInput = document.getElementById('password');
+const roleRadios = document.getElementsByName('role');
+const btnHostStart = document.getElementById('btn-host-start');
+const btnGuestStart = document.getElementById('btn-guest-start');
+const btnStartScan = document.getElementById('btn-start-scan');
+const btnStopScan = document.getElementById('btn-stop-scan');
+const statusText = document.getElementById('status-text');
+const logEl = document.getElementById('log');
+const chatArea = document.getElementById('chat-area');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+const qrcodeHostEl = document.getElementById('qrcode-host');
+const qrcodeGuestEl = document.getElementById('qrcode-guest');
+const textInput = document.getElementById('text-input');
+const textOutput = document.getElementById('text-output');
+const btnApplyText = document.getElementById('btn-apply-text');
+const btnStartAudio = document.getElementById('btn-start-audio');
+const btnStartVideo = document.getElementById('btn-start-video');
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+const fileInput = document.getElementById('file-input');
+const btnSendFile = document.getElementById('btn-send-file');
+const fileLog = document.getElementById('file-log');
+
+/* === グローバル状態 === */
+let html5QrCode = null;
+let currentRole = 'host';
+let pc = null;
+let dataChannel = null;
+let localStream = null;
+let remoteStream = null;
+let incomingFileInfo = null;
+let expectingBinaryFile = false;
+
+/* === 共通ユーティリティ === */
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent += `[${t}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setStatus(t) {
+  statusText.textContent = t;
+}
+function getPassword() {
+  return passwordInput.value.trim();
+}
+function checkedRole() {
+  for (const r of roleRadios) if (r.checked) return r.value;
+  return 'host';
+}
+function clearQRCodes() {
+  qrcodeHostEl.innerHTML = '';
+  qrcodeGuestEl.innerHTML = '';
+}
+function enableChat(b) {
+  chatInput.disabled = !b;
+  chatSend.disabled = !b;
+  btnStartAudio.disabled = !b;
+  btnStartVideo.disabled = !b;
+  btnSendFile.disabled = !b;
+}
+function appendChatMessage(text, self) {
+  const div = document.createElement('div');
+  div.className = self ? 'chat-self' : 'chat-peer';
+  div.textContent = (self ? '自分: ' : '相手: ') + text;
+  chatArea.appendChild(div);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+/* === WebRTC セットアップ === */
+function createPeerConnection() {
+  pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
+
+  pc.onconnectionstatechange = () => {
+    log(`connectionState: ${pc.connectionState}`);
+    if (pc.connectionState === 'connected') {
+      setStatus('接続完了');
+      enableChat(true);
+    }
+  };
+
+  pc.ondatachannel = (ev) => {
+    setupDataChannel(ev.channel);
+  };
+
+  pc.ontrack = (event) => {
+    if (!remoteStream) {
+      remoteStream = new MediaStream();
+      remoteVideo.srcObject = remoteStream;
+    }
+    remoteStream.addTrack(event.track);
+  };
+
+  log('RTCPeerConnection 作成');
+}
+
+function setupDataChannel(ch) {
+  dataChannel = ch;
+  dataChannel.binaryType = "arraybuffer";
+
+  dataChannel.onopen = () => {
+    log('データチャネル open');
+    enableChat(true);
+  };
+
+  dataChannel.onmessage = async (event) => {
+    // ファイルバイナリ受信中ならそのまま扱う
+    if (expectingBinaryFile && incomingFileInfo && event.data instanceof ArrayBuffer) {
+      const blob = new Blob([event.data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = incomingFileInfo.name;
+      a.textContent = `受信: ${incomingFileInfo.name} (${incomingFileInfo.size} bytes)`;
+      fileLog.appendChild(a);
+      fileLog.appendChild(document.createElement("br"));
+      incomingFileInfo = null;
+      expectingBinaryFile = false;
+      log("ファイル受信完了");
+      return;
+    }
+
+    // まず JSON として解釈してみる
+    if (typeof event.data === "string") {
+      try {
+        const msg = JSON.parse(event.data);
+
+        // 再ネゴシエーション用
+        if (msg.type === "renegotiate-offer") {
+          log("再 offer 受信");
+          await pc.setRemoteDescription({ type: "offer", sdp: msg.sdp });
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          dataChannel.send(JSON.stringify({
+            type: "renegotiate-answer",
+            sdp: answer.sdp
+          }));
+          return;
+        }
+        if (msg.type === "renegotiate-answer") {
+          log("再 answer 受信");
+          await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+          return;
+        }
+
+        // ファイルメタ情報
+        if (msg.type === "file-info") {
+          incomingFileInfo = msg;
+          expectingBinaryFile = true;
+          log(`ファイル情報受信: ${msg.name} (${msg.size} bytes)`);
+          return;
+        }
+
+        // 上記以外の JSON は扱わない → 普通のテキストとみなす
+      } catch (e) {
+        // JSON じゃない → 普通のチャットメッセージ
+      }
+
+      // チャットメッセージとして表示
+      appendChatMessage(event.data, false);
+    }
+  };
+
+  dataChannel.onclose = () => {
+    log('データチャネル close');
+    enableChat(false);
+  };
+}
+
+function createQrPayload(kind, sdp, password) {
+  return JSON.stringify({
+    v: 1,
+    role: currentRole,
+    kind: kind,      // "offer" or "answer"
+    pass: password,
+    sdp: sdp
+  });
+}
+
+/* === 再ネゴシエーション === */
+async function renegotiate() {
+  if (!pc || !dataChannel || dataChannel.readyState !== "open") {
+    alert("接続がまだ確立されていません");
+    return;
+  }
+  log("再ネゴシエーション開始");
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  dataChannel.send(JSON.stringify({
+    type: "renegotiate-offer",
+    sdp: offer.sdp
+  }));
+}
+
+/* === QR/テキスト ペイロード処理 === */
+async function handleQrPayload(text) {
+  log('受信データ: ' + text.slice(0, 40) + '...');
+
+  let obj;
+  try { obj = JSON.parse(text); }
+  catch { alert("JSON 形式が不正です"); return; }
+
+  const password = getPassword();
+  if (!password) { alert("パスワードを入力してください"); return; }
+  if (obj.pass !== password) { alert("パスワードが一致しません"); return; }
+
+  if (!pc) createPeerConnection();
+
+  if (obj.kind === "offer") {
+    // ゲスト側がホストの offer を受け取る
+    await pc.setRemoteDescription({ type: "offer", sdp: obj.sdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    const payload = createQrPayload("answer", answer.sdp, password);
+    textOutput.value = payload;
+    qrcodeGuestEl.innerHTML = "";
+    new QRCode(qrcodeGuestEl, { text: payload, width: 200, height: 200 });
+
+    setStatus("ゲスト: answer を生成しました（QR またはテキストでホストに渡す）");
+    log("answer 生成");
+
+  } else if (obj.kind === "answer") {
+    // ホスト側がゲストの answer を受け取る
+    await pc.setRemoteDescription({ type: "answer", sdp: obj.sdp });
+    setStatus("ホスト: answer を受信しました。接続待機中...");
+    log("answer 適用");
+  }
+}
+
+/* === ボタン処理 === */
+
+// ホスト開始
+btnHostStart.onclick = async () => {
+  currentRole = "host";
+  const password = getPassword();
+  if (!password) return alert("パスワードを入力してください");
+
+  clearQRCodes();
+  enableChat(false);
+
+  createPeerConnection();
+  const ch = pc.createDataChannel("chat");
+  setupDataChannel(ch);
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  const payload = createQrPayload("offer", offer.sdp, password);
+  textOutput.value = payload;
+  new QRCode(qrcodeHostEl, { text: payload, width: 200, height: 200 });
+
+  setStatus("ホスト: offer を生成しました（QR or テキストでゲストへ）");
+  log("offer 生成");
+
+  btnStartScan.disabled = false;
+};
+
+// ゲスト開始
+btnGuestStart.onclick = () => {
+  currentRole = "guest";
+  const password = getPassword();
+  if (!password) return alert("パスワードを入力してください");
+
+  clearQRCodes();
+  enableChat(false);
+
+  createPeerConnection();
+  setStatus("ゲスト: ホストの offer を QR or テキストで受け取ってください");
+  log("ゲスト待機");
+  btnStartScan.disabled = false;
+};
+
+// QR 読み取り開始
+btnStartScan.onclick = () => {
+  if (!html5QrCode) html5QrCode = new Html5Qrcode("html5-qrcode");
+
+  Html5Qrcode.getCameras().then(cams => {
+    if (!cams.length) return alert("カメラがありません");
+
+    html5QrCode.start(
+      cams[0].id,
+      { fps: 10, qrbox: 220 },
+      (decoded) => {
+        html5QrCode.stop();
+        btnStartScan.disabled = false;
+        btnStopScan.disabled = true;
+        handleQrPayload(decoded);
+      },
+      () => {}
+    );
+
+    btnStartScan.disabled = true;
+    btnStopScan.disabled = false;
+    log("QR読み取り開始");
+  }).catch(err => {
+    alert("カメラ初期化に失敗: " + err);
+  });
+};
+
+// QR 読み取り停止
+btnStopScan.onclick = () => {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      btnStartScan.disabled = false;
+      btnStopScan.disabled = true;
+      log("QR読み取り停止");
+    }).catch(() => {});
+  }
+};
+
+// テキスト適用
+btnApplyText.onclick = () => {
+  const text = textInput.value.trim();
+  if (!text) return alert("テキストが空です");
+  handleQrPayload(text);
+};
+
+// チャット送信
+chatSend.onclick = () => {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  if (!dataChannel || dataChannel.readyState !== "open") {
+    alert("データチャネルが開いていません");
+    return;
+  }
+  dataChannel.send(text);
+  appendChatMessage(text, true);
+  chatInput.value = "";
+};
+
+chatInput.onkeydown = (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    chatSend.click();
+  }
+};
+
+// 音声通話開始
+btnStartAudio.onclick = async () => {
+  if (localStream) {
+    alert("すでにメディアストリームがあります（ビデオ通話中など）");
+    return;
+  }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    renegotiate();
+    log("音声通話用ストリームを追加");
+  } catch (e) {
+    alert("マイクへのアクセスに失敗: " + e);
+  }
+};
+
+// ビデオ通話開始
+btnStartVideo.onclick = async () => {
+  if (localStream) {
+    alert("すでにメディアストリームがあります（音声通話中など）");
+    return;
+  }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    renegotiate();
+    log("ビデオ通話用ストリームを追加");
+  } catch (e) {
+    alert("カメラ/マイクへのアクセスに失敗: " + e);
+  }
+};
+
+// ファイル送信
+btnSendFile.onclick = () => {
+  if (!dataChannel || dataChannel.readyState !== "open") {
+    alert("接続が確立されていません");
+    return;
+  }
+  const file = fileInput.files[0];
+  if (!file) return alert("ファイルを選択してください");
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const arrayBuffer = reader.result;
+    dataChannel.send(JSON.stringify({
+      type: "file-info",
+      name: file.name,
+      size: file.size
+    }));
+    dataChannel.send(arrayBuffer);
+    fileLog.textContent += `送信: ${file.name} (${file.size} bytes)\n`;
+    log("ファイル送信: " + file.name);
+  };
+  reader.readAsArrayBuffer(file);
+};
+
+// role 切り替え
+for (const r of roleRadios) {
+  r.onchange = () => currentRole = checkedRole();
+}
+</script>
+</body>
+</html>
