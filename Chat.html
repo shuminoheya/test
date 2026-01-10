@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>パスワード＋QR接続 WebRTC チャット</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- QRコード生成 -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <!-- カメラでQR読み取り -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 16px; }
+    h1 { font-size: 1.4rem; }
+    input, button { font-family: inherit; font-size: 1rem; }
+    #chatLog { border: 1px solid #ccc; height: 200px; overflow-y: auto; padding: 8px; margin-top: 8px; }
+    #msg { width: 70%; }
+    #qrcodeHost, #qrcodeGuest { margin: 8px 0; }
+    .box { border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 8px; }
+    #reader { width: 260px; margin-top: 8px; }
+    .role-label { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>🔐 パスワード＋QR接続 WebRTC チャット</h1>
+
+  <div class="box">
+    <div>① パスワード（2人で同じものを使う）</div>
+    <input id="password" type="text" placeholder="例: secret123">
+  </div>
+
+  <div class="box">
+    <div>② どちらかが <span class="role-label">ホスト</span>、もう一方が <span class="role-label">ゲスト</span> を選ぶ</div>
+    <button id="hostBtn">ホストとして部屋を作る</button>
+    <button id="guestBtn">ゲストとして参加する</button>
+  </div>
+
+  <div class="box">
+    <div class="role-label">ホスト用エリア</div>
+    <ol>
+      <li>「ホストとして部屋を作る」を押す</li>
+      <li>少し待つと QR が出るので、ゲストにカメラで読み取ってもらう</li>
+      <li>その後、ゲスト側に出た QR を「QR読み取り開始」で読み取る</li>
+    </ol>
+    <div>ゲストに読んでもらうホストの QR:</div>
+    <canvas id="qrcodeHost"></canvas>
+    <div>ゲストから返ってきた QR をカメラで読み取る:</div>
+    <div id="readerHost"></div>
+  </div>
+
+  <div class="box">
+    <div class="role-label">ゲスト用エリア</div>
+    <ol>
+      <li>「ゲストとして参加する」を押す</li>
+      <li>「QR読み取り開始」を押して、ホストの QR をカメラで読む</li>
+      <li>少し待つと自分用の QR が出るので、それをホストに読み取ってもらう</li>
+    </ol>
+    <button id="startScanGuest">QR読み取り開始（ホストのQR）</button>
+    <div id="reader"></div>
+    <div>ホストに読んでもらうゲストの QR:</div>
+    <canvas id="qrcodeGuest"></canvas>
+  </div>
+
+  <div class="box">
+    <div class="role-label">③ チャット</div>
+    <div id="status">状態: 未接続</div>
+    <div id="chatLog"></div>
+    <input id="msg" type="text" placeholder="メッセージ" disabled>
+    <button id="send" disabled>送信</button>
+  </div>
+
+  <script>
+    // --- WebRTC 基本 ---
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+    let dataChannel = null;
+    let localCandidates = [];
+    let role = null; // "host" or "guest"
+
+    const passwordInput = document.getElementById("password");
+    const statusEl = document.getElementById("status");
+    const chatLog = document.getElementById("chatLog");
+    const msgInput = document.getElementById("msg");
+    const sendBtn = document.getElementById("send");
+    const qrcodeHostCanvas = document.getElementById("qrcodeHost");
+    const qrcodeGuestCanvas = document.getElementById("qrcodeGuest");
+
+    function logChat(text) {
+      const time = new Date().toLocaleTimeString();
+      chatLog.innerHTML += `[${time}] ${text}<br>`;
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = "状態: " + text;
+    }
+
+    // --- 暗号化 / 復号（AES-GCM + PBKDF2） ---
+    async function deriveKey(password) {
+      const enc = new TextEncoder().encode(password);
+      const baseKey = await crypto.subtle.importKey("raw", enc, "PBKDF2", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: new Uint8Array(16), iterations: 100000, hash: "SHA-256" },
+        baseKey,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    async function encryptJSON(obj, password) {
+      const key = await deriveKey(password);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const data = new TextEncoder().encode(JSON.stringify(obj));
+      const enc = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+      return btoa(JSON.stringify({
+        iv: Array.from(iv),
+        data: Array.from(new Uint8Array(enc))
+      }));
+    }
+
+    async function decryptJSON(encText, password) {
+      const key = await deriveKey(password);
+      const obj = JSON.parse(atob(encText));
+      const iv = new Uint8Array(obj.iv);
+      const data = new Uint8Array(obj.data);
+      const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+      return JSON.parse(new TextDecoder().decode(dec));
+    }
+
+    // ICE候補収集
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        localCandidates.push(e.candidate);
+      } else {
+        console.log("ICE 収集完了");
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE state:", pc.iceConnectionState);
+      if (pc.iceConnectionState === "connected") {
+        setStatus("接続完了");
+        msgInput.disabled = false;
+        sendBtn.disabled = false;
+        logChat("接続しました。チャットできます。");
+      }
+    };
+
+    // DataChannel 受信（ゲスト側）
+    pc.ondatachannel = (e) => {
+      dataChannel = e.channel;
+      setupDataChannel();
+    };
+
+    function setupDataChannel() {
+      dataChannel.onopen = () => {
+        setStatus("データチャネルOPEN");
+        msgInput.disabled = false;
+        sendBtn.disabled = false;
+      };
+      dataChannel.onmessage = (e) => {
+        logChat("相手: " + e.data);
+      };
+      dataChannel.onclose = () => {
+        setStatus("切断されました");
+        msgInput.disabled = true;
+        sendBtn.disabled = true;
+      };
+    }
+
+    sendBtn.onclick = () => {
+      const text = msgInput.value;
+      if (!text || !dataChannel || dataChannel.readyState !== "open") return;
+      dataChannel.send(text);
+      logChat("自分: " + text);
+      msgInput.value = "";
+    };
+
+    msgInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendBtn.click();
+    });
+
+    // --- ホストの処理 ---
+    document.getElementById("hostBtn").onclick = async () => {
+      if (!passwordInput.value) {
+        alert("パスワードを入力してください");
+        return;
+      }
+      role = "host";
+      setStatus("ホスト: Offer 作成中…");
+
+      dataChannel = pc.createDataChannel("chat");
+      setupDataChannel();
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // 少し待ってICE候補を集めてから QR 作成
+      setTimeout(async () => {
+        const signalData = {
+          type: "offer",
+          sdp: pc.localDescription,
+          candidates: localCandidates
+        };
+        const enc = await encryptJSON(signalData, passwordInput.value);
+        QRCode.toCanvas(qrcodeHostCanvas, enc, { width: 200 }, (err) => {
+          if (err) console.error(err);
+        });
+        setStatus("ホスト: QR をゲストに読み取ってもらってください");
+        startHostScanner(); // ゲストからの Answer を読む準備
+      }, 1500);
+    };
+
+    function startHostScanner() {
+      const hostReaderElem = document.getElementById("readerHost");
+      hostReaderElem.innerHTML = "";
+      const html5QrCode = new Html5Qrcode("readerHost");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 200 },
+        async (decodedText) => {
+          try {
+            const data = await decryptJSON(decodedText, passwordInput.value);
+            if (data.type === "answer") {
+              await pc.setRemoteDescription(data.sdp);
+              for (const c of data.candidates || []) {
+                await pc.addIceCandidate(c);
+              }
+              setStatus("ホスト: Answer を受信しました。接続待ち…");
+              html5QrCode.stop().catch(console.error);
+            }
+          } catch (e) {
+            console.error(e);
+            alert("復号に失敗しました。パスワードが一致していない可能性があります。");
+          }
+        },
+        (err) => {
+          // 読み取り失敗時のログ（無視してOK）
+        }
+      ).catch((err) => {
+        console.error("QR スキャン開始エラー:", err);
+      });
+    }
+
+    // --- ゲストの処理 ---
+    document.getElementById("guestBtn").onclick = () => {
+      if (!passwordInput.value) {
+        alert("パスワードを入力してください");
+        return;
+      }
+      role = "guest";
+      setStatus("ゲスト: ホストの QR を読み取ってください");
+    };
+
+    document.getElementById("startScanGuest").onclick = () => {
+      if (role !== "guest") {
+        alert("先に「ゲストとして参加する」を押してください");
+        return;
+      }
+      const readerElem = document.getElementById("reader");
+      readerElem.innerHTML = "";
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 200 },
+        async (decodedText) => {
+          try {
+            const data = await decryptJSON(decodedText, passwordInput.value);
+            if (data.type === "offer") {
+              setStatus("ゲスト: Offer 受信。Answer 作成中…");
+              await pc.setRemoteDescription(data.sdp);
+              for (const c of data.candidates || []) {
+                await pc.addIceCandidate(c);
+              }
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              setTimeout(async () => {
+                const signalAnswer = {
+                  type: "answer",
+                  sdp: pc.localDescription,
+                  candidates: localCandidates
+                };
+                const encAns = await encryptJSON(signalAnswer, passwordInput.value);
+                QRCode.toCanvas(qrcodeGuestCanvas, encAns, { width: 200 }, (err) => {
+                  if (err) console.error(err);
+                });
+                setStatus("ゲスト: この QR をホストに読み取ってもらってください");
+                html5QrCode.stop().catch(console.error);
+              }, 1500);
+            }
+          } catch (e) {
+            console.error(e);
+            alert("復号に失敗しました。パスワードが一致していない可能性があります。");
+          }
+        },
+        (err) => {
+          // 読み取り失敗時は無視
+        }
+      ).catch((err) => {
+        console.error("QR スキャン開始エラー:", err);
+      });
+    };
+  </script>
+</body>
+</html>
