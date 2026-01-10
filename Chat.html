@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>パスワード＋QR接続 WebRTC チャット</title>
+  <title>パスワード＋QR＋テキスト接続 WebRTC チャット</title>
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -22,18 +22,23 @@
       margin-bottom: 12px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
-    label {
-      display: block;
-      margin: 4px 0;
-    }
-    input[type="text"], textarea {
+    textarea {
       width: 100%;
+      height: 120px;
       box-sizing: border-box;
       padding: 6px;
-      margin-top: 4px;
       border-radius: 4px;
       border: 1px solid #ccc;
-      font-family: inherit;
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
     }
     button {
       padding: 6px 12px;
@@ -49,30 +54,6 @@
       background: #aaa;
       cursor: default;
     }
-    #status {
-      font-size: 14px;
-      margin-top: 4px;
-    }
-    #status span {
-      font-weight: bold;
-    }
-    #qrcode-host, #qrcode-guest {
-      margin-top: 8px;
-    }
-    #log {
-      width: 100%;
-      height: 160px;
-      box-sizing: border-box;
-      padding: 6px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      background: #111;
-      color: #0f0;
-      font-family: "SF Mono", Menlo, Consolas, monospace;
-      font-size: 12px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-    }
     #chat-area {
       height: 160px;
       background: #fff;
@@ -83,400 +64,323 @@
       font-size: 14px;
       white-space: pre-wrap;
     }
-    .chat-self {
-      color: #1976d2;
-    }
-    .chat-peer {
-      color: #2e7d32;
-    }
-    #html5-qrcode {
-      width: 260px;
-      max-width: 100%;
-      margin-top: 8px;
+    .chat-self { color: #1976d2; }
+    .chat-peer { color: #2e7d32; }
+    #log {
+      width: 100%;
+      height: 160px;
+      background: #111;
+      color: #0f0;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
     }
   </style>
 
-  <!-- QRコード生成ライブラリ -->
+  <!-- QRコード生成 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- QRコード読み取りライブラリ -->
+  <!-- QRコード読み取り -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
-  <h1>🔐 パスワード＋QR接続 WebRTC チャット</h1>
 
-  <div class="section">
-    <label>
-      <b>パスワード（2人で同じものを使う）:</b>
-      <input type="text" id="password" placeholder="例: secret123">
-    </label>
+<h1>🔐 パスワード＋QR＋テキスト接続 WebRTC チャット</h1>
 
-    <label>
-      <input type="radio" name="role" value="host" checked> ホスト
-    </label>
-    <label>
-      <input type="radio" name="role" value="guest"> ゲスト
-    </label>
+<div class="section">
+  <label><b>パスワード（2人で同じものを使う）:</b></label>
+  <input type="text" id="password" placeholder="例: secret123">
 
-    <div style="margin-top:8px;">
-      <button id="btn-host-start">ホストとして部屋を作る</button>
-      <button id="btn-guest-start">ゲストとして参加する</button>
-      <button id="btn-start-scan" disabled>QR読み取り開始</button>
-      <button id="btn-stop-scan" disabled>QR読み取り停止</button>
-    </div>
+  <label><input type="radio" name="role" value="host" checked> ホスト</label>
+  <label><input type="radio" name="role" value="guest"> ゲスト</label>
 
-    <div id="status">
-      状態: <span id="status-text">未接続</span>
-    </div>
+  <div style="margin-top:8px;">
+    <button id="btn-host-start">ホストとして部屋を作る</button>
+    <button id="btn-guest-start">ゲストとして参加する</button>
+    <button id="btn-start-scan" disabled>QR読み取り開始</button>
+    <button id="btn-stop-scan" disabled>QR読み取り停止</button>
   </div>
 
-  <div class="section">
-    <h2 style="font-size:16px;margin:0 0 4px;">ホスト側のQR</h2>
-    <div id="qrcode-host"></div>
-    <small>ホストが生成する QR。ゲストにカメラで読み取ってもらいます。</small>
-  </div>
+  <div id="status">状態: <span id="status-text">未接続</span></div>
+</div>
 
-  <div class="section">
-    <h2 style="font-size:16px;margin:0 0 4px;">ゲスト側のQR</h2>
-    <div id="qrcode-guest"></div>
-    <small>ゲストが生成する QR。ホストにカメラで読み取ってもらいます。</small>
-  </div>
+<div class="section">
+  <h2>ホスト側 QR</h2>
+  <div id="qrcode-host"></div>
+</div>
 
-  <div class="section">
-    <h2 style="font-size:16px;margin:0 0 4px;">QR読み取り</h2>
-    <div id="html5-qrcode"></div>
-    <small>「QR読み取り開始」を押して、相手の QR を読み取ります。</small>
-  </div>
+<div class="section">
+  <h2>ゲスト側 QR</h2>
+  <div id="qrcode-guest"></div>
+</div>
 
-  <div class="section">
-    <h2 style="font-size:16px;margin:0 0 4px;">チャット</h2>
-    <div id="chat-area"></div>
-    <div style="margin-top:6px;">
-      <input type="text" id="chat-input" placeholder="メッセージを入力" disabled>
-      <button id="chat-send" disabled>送信</button>
-    </div>
-  </div>
+<div class="section">
+  <h2>QR読み取り</h2>
+  <div id="html5-qrcode"></div>
+</div>
 
-  <div class="section">
-    <h2 style="font-size:16px;margin:0 0 4px;">ログ</h2>
-    <div id="log"></div>
-  </div>
+<div class="section">
+  <h2>テキスト接続（手動シグナリング）</h2>
 
-  <script>
-    // --- UI 要素の取得 ---
-    const passwordInput = document.getElementById('password');
-    const roleRadios = document.getElementsByName('role');
-    const btnHostStart = document.getElementById('btn-host-start');
-    const btnGuestStart = document.getElementById('btn-guest-start');
-    const btnStartScan = document.getElementById('btn-start-scan');
-    const btnStopScan = document.getElementById('btn-stop-scan');
-    const statusText = document.getElementById('status-text');
-    const logEl = document.getElementById('log');
-    const chatArea = document.getElementById('chat-area');
-    const chatInput = document.getElementById('chat-input');
-    const chatSend = document.getElementById('chat-send');
+  <h3>受信したテキストを貼り付け</h3>
+  <textarea id="text-input" placeholder="ここに offer または answer を貼り付け"></textarea>
+  <button id="btn-apply-text">適用</button>
 
-    const qrcodeHostEl = document.getElementById('qrcode-host');
-    const qrcodeGuestEl = document.getElementById('qrcode-guest');
+  <h3>自分のシグナリング情報</h3>
+  <textarea id="text-output" readonly></textarea>
+</div>
 
-    let html5QrCode = null;
-    let currentRole = 'host';
-    let pc = null;
-    let dataChannel = null;
-    let localOfferCreated = false;
-    let connectionEstablished = false;
+<div class="section">
+  <h2>チャット</h2>
+  <div id="chat-area"></div>
+  <input type="text" id="chat-input" placeholder="メッセージを入力" disabled>
+  <button id="chat-send" disabled>送信</button>
+</div>
 
-    // --- ユーティリティ ---
-    function log(msg) {
-      const time = new Date().toLocaleTimeString();
-      logEl.textContent += `[${time}] ${msg}\n`;
-      logEl.scrollTop = logEl.scrollHeight;
+<div class="section">
+  <h2>ログ</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+/* --- ここから JavaScript（QR + テキスト接続 完全統合） --- */
+
+const passwordInput = document.getElementById('password');
+const roleRadios = document.getElementsByName('role');
+const btnHostStart = document.getElementById('btn-host-start');
+const btnGuestStart = document.getElementById('btn-guest-start');
+const btnStartScan = document.getElementById('btn-start-scan');
+const btnStopScan = document.getElementById('btn-stop-scan');
+const statusText = document.getElementById('status-text');
+const logEl = document.getElementById('log');
+const chatArea = document.getElementById('chat-area');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+
+const qrcodeHostEl = document.getElementById('qrcode-host');
+const qrcodeGuestEl = document.getElementById('qrcode-guest');
+
+const textInput = document.getElementById('text-input');
+const textOutput = document.getElementById('text-output');
+
+let html5QrCode = null;
+let currentRole = 'host';
+let pc = null;
+let dataChannel = null;
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent += `[${t}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(t) {
+  statusText.textContent = t;
+}
+
+function getPassword() {
+  return passwordInput.value.trim();
+}
+
+function checkedRole() {
+  for (const r of roleRadios) if (r.checked) return r.value;
+  return 'host';
+}
+
+function clearQRCodes() {
+  qrcodeHostEl.innerHTML = '';
+  qrcodeGuestEl.innerHTML = '';
+}
+
+function enableChat(b) {
+  chatInput.disabled = !b;
+  chatSend.disabled = !b;
+}
+
+function appendChatMessage(text, self) {
+  const div = document.createElement('div');
+  div.className = self ? 'chat-self' : 'chat-peer';
+  div.textContent = (self ? '自分: ' : '相手: ') + text;
+  chatArea.appendChild(div);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function createPeerConnection() {
+  pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
+
+  pc.onconnectionstatechange = () => {
+    log(`connectionState: ${pc.connectionState}`);
+    if (pc.connectionState === 'connected') {
+      setStatus('接続完了');
+      enableChat(true);
     }
+  };
 
-    function setStatus(text) {
-      statusText.textContent = text;
-    }
+  pc.ondatachannel = (ev) => {
+    setupDataChannel(ev.channel);
+  };
 
-    function getPassword() {
-      return passwordInput.value.trim();
-    }
+  log('RTCPeerConnection 作成');
+}
 
-    function checkedRole() {
-      for (const r of roleRadios) {
-        if (r.checked) return r.value;
+function setupDataChannel(ch) {
+  dataChannel = ch;
+  dataChannel.onopen = () => {
+    log('データチャネル open');
+    enableChat(true);
+  };
+  dataChannel.onmessage = (ev) => {
+    appendChatMessage(ev.data, false);
+  };
+}
+
+function createQrPayload(type, sdp, password) {
+  return JSON.stringify({
+    v: 1,
+    role: currentRole,
+    kind: type,
+    pass: password,
+    sdp: sdp
+  });
+}
+
+async function handleQrPayload(text) {
+  log('受信データ: ' + text.slice(0, 40) + '...');
+
+  let obj;
+  try { obj = JSON.parse(text); }
+  catch { alert("JSON 形式が不正です"); return; }
+
+  const password = getPassword();
+  if (!password) { alert("パスワードを入力してください"); return; }
+  if (obj.pass !== password) { alert("パスワードが一致しません"); return; }
+
+  if (!pc) createPeerConnection();
+
+  if (obj.kind === "offer") {
+    await pc.setRemoteDescription({ type: "offer", sdp: obj.sdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    const payload = createQrPayload("answer", answer.sdp, password);
+    textOutput.value = payload;
+
+    qrcodeGuestEl.innerHTML = "";
+    new QRCode(qrcodeGuestEl, { text: payload, width: 200, height: 200 });
+
+    setStatus("ゲスト: answer を生成しました");
+    log("answer 生成");
+
+  } else if (obj.kind === "answer") {
+    await pc.setRemoteDescription({ type: "answer", sdp: obj.sdp });
+    setStatus("ホスト: answer を受信しました");
+    log("answer 適用");
+  }
+}
+
+/* --- ボタン処理 --- */
+
+btnHostStart.onclick = async () => {
+  currentRole = "host";
+  const password = getPassword();
+  if (!password) return alert("パスワードを入力してください");
+
+  clearQRCodes();
+  enableChat(false);
+
+  createPeerConnection();
+  const ch = pc.createDataChannel("chat");
+  setupDataChannel(ch);
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  const payload = createQrPayload("offer", offer.sdp, password);
+  textOutput.value = payload;
+
+  new QRCode(qrcodeHostEl, { text: payload, width: 200, height: 200 });
+
+  setStatus("ホスト: offer を生成しました");
+  log("offer 生成");
+
+  btnStartScan.disabled = false;
+};
+
+btnGuestStart.onclick = () => {
+  currentRole = "guest";
+  const password = getPassword();
+  if (!password) return alert("パスワードを入力してください");
+
+  clearQRCodes();
+  enableChat(false);
+
+  createPeerConnection();
+  setStatus("ゲスト: ホストの offer を読み取ってください");
+
+  btnStartScan.disabled = false;
+};
+
+btnStartScan.onclick = () => {
+  if (!html5QrCode) html5QrCode = new Html5Qrcode("html5-qrcode");
+
+  Html5Qrcode.getCameras().then(cams => {
+    if (!cams.length) return alert("カメラがありません");
+
+    html5QrCode.start(
+      cams[0].id,
+      { fps: 10, qrbox: 220 },
+      (decoded) => {
+        html5QrCode.stop();
+        btnStartScan.disabled = false;
+        btnStopScan.disabled = true;
+        handleQrPayload(decoded);
       }
-      return 'host';
-    }
+    );
 
-    function clearQRCodes() {
-      qrcodeHostEl.innerHTML = '';
-      qrcodeGuestEl.innerHTML = '';
-    }
+    btnStartScan.disabled = true;
+    btnStopScan.disabled = false;
+    log("QR読み取り開始");
+  });
+};
 
-    function enableChat(enable) {
-      chatInput.disabled = !enable;
-      chatSend.disabled = !enable;
-    }
+btnStopScan.onclick = () => {
+  if (html5QrCode) {
+    html5QrCode.stop();
+    btnStartScan.disabled = false;
+    btnStopScan.disabled = true;
+  }
+};
 
-    function appendChatMessage(text, self) {
-      const div = document.createElement('div');
-      div.className = self ? 'chat-self' : 'chat-peer';
-      div.textContent = (self ? '自分: ' : '相手: ') + text;
-      chatArea.appendChild(div);
-      chatArea.scrollTop = chatArea.scrollHeight;
-    }
+btnApplyText.onclick = () => {
+  const text = textInput.value.trim();
+  if (!text) return alert("テキストが空です");
+  handleQrPayload(text);
+};
 
-    // --- WebRTC セットアップ ---
-    function createPeerConnection() {
-      const config = {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' }
-        ]
-      };
-      pc = new RTCPeerConnection(config);
+chatSend.onclick = () => {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  dataChannel.send(text);
+  appendChatMessage(text, true);
+  chatInput.value = "";
+};
 
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          // trickle ICE は使わず、候補は SDP に含めるので何もしない
-        }
-      };
+chatInput.onkeydown = (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    chatSend.click();
+  }
+};
 
-      pc.onconnectionstatechange = () => {
-        log(`connectionState: ${pc.connectionState}`);
-        if (pc.connectionState === 'connected') {
-          setStatus('接続完了');
-          connectionEstablished = true;
-          enableChat(true);
-        } else if (pc.connectionState === 'disconnected' ||
-                   pc.connectionState === 'failed' ||
-                   pc.connectionState === 'closed') {
-          connectionEstablished = false;
-          enableChat(false);
-        }
-      };
+for (const r of roleRadios) {
+  r.onchange = () => currentRole = checkedRole();
+}
 
-      pc.ondatachannel = (event) => {
-        log('データチャネル受信');
-        setupDataChannel(event.channel);
-      };
-
-      log('RTCPeerConnection 作成');
-    }
-
-    function setupDataChannel(ch) {
-      dataChannel = ch;
-      dataChannel.onopen = () => {
-        log('データチャネル open');
-        if (pc.connectionState === 'connected') {
-          enableChat(true);
-        }
-      };
-      dataChannel.onclose = () => {
-        log('データチャネル close');
-        enableChat(false);
-      };
-      dataChannel.onerror = (e) => {
-        log('データチャネル error: ' + e);
-      };
-      dataChannel.onmessage = (event) => {
-        appendChatMessage(event.data, false);
-      };
-    }
-
-    // QR に埋め込むデータの作成
-    function createQrPayload(type, sdp, password) {
-      const obj = {
-        v: 1,
-        role: currentRole,
-        kind: type, // "offer" or "answer"
-        pass: password,
-        sdp: sdp
-      };
-      return JSON.stringify(obj);
-    }
-
-    // QR 読み取り後の処理
-    async function handleQrPayload(text) {
-      log('QR 読み取り: ' + text.slice(0, 40) + '...');
-      let obj;
-      try {
-        obj = JSON.parse(text);
-      } catch (e) {
-        alert('QRの形式が不正です');
-        log('JSON parse error');
-        return;
-      }
-      const password = getPassword();
-      if (!password) {
-        alert('先にパスワードを入力してください');
-        return;
-      }
-      if (obj.pass !== password) {
-        alert('パスワードが一致しません');
-        log('パスワード不一致');
-        return;
-      }
-      if (!pc) {
-        createPeerConnection();
-      }
-
-      if (obj.kind === 'offer') {
-        // ゲストがホストの offer を読み取る
-        log('offer をセット');
-        await pc.setRemoteDescription(new RTCSessionDescription({
-          type: 'offer',
-          sdp: obj.sdp
-        }));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        const payload = createQrPayload('answer', answer.sdp, password);
-        qrcodeGuestEl.innerHTML = '';
-        new QRCode(qrcodeGuestEl, {
-          text: payload,
-          width: 200,
-          height: 200,
-        });
-        log('answer QR を生成（ゲスト→ホスト）');
-        setStatus('ゲスト: answer を生成。ホストに読み取ってもらってください。');
-
-      } else if (obj.kind === 'answer') {
-        // ホストがゲストの answer を読み取る
-        log('answer をセット');
-        await pc.setRemoteDescription(new RTCSessionDescription({
-          type: 'answer',
-          sdp: obj.sdp
-        }));
-        setStatus('ホスト: answer を受信。接続待機中...');
-      } else {
-        alert('不明な kind です');
-      }
-    }
-
-    // --- イベントハンドラ ---
-    btnHostStart.addEventListener('click', async () => {
-      currentRole = 'host';
-      const password = getPassword();
-      if (!password) {
-        alert('パスワードを入力してください');
-        return;
-      }
-      clearQRCodes();
-      enableChat(false);
-      connectionEstablished = false;
-
-      createPeerConnection();
-      const channel = pc.createDataChannel('chat');
-      setupDataChannel(channel);
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const payload = createQrPayload('offer', offer.sdp, password);
-      new QRCode(qrcodeHostEl, {
-        text: payload,
-        width: 200,
-        height: 200,
-      });
-      localOfferCreated = true;
-      setStatus('ホスト: offer QR を生成。ゲストに読み取ってもらってください。');
-      log('offer QR を生成（ホスト→ゲスト）');
-
-      btnStartScan.disabled = false;
-    });
-
-    btnGuestStart.addEventListener('click', () => {
-      currentRole = 'guest';
-      const password = getPassword();
-      if (!password) {
-        alert('パスワードを入力してください');
-        return;
-      }
-      clearQRCodes();
-      enableChat(false);
-      connectionEstablished = false;
-      createPeerConnection();
-
-      setStatus('ゲスト: ホストの QR を読み取ってください。');
-      btnStartScan.disabled = false;
-    });
-
-    // QR 読み取り開始
-    btnStartScan.addEventListener('click', () => {
-      if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("html5-qrcode");
-      }
-
-      Html5Qrcode.getCameras().then(cameras => {
-        if (!cameras || cameras.length === 0) {
-          alert('カメラが見つかりません');
-          return;
-        }
-        const cameraId = cameras[0].id;
-        html5QrCode.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: 220
-          },
-          (decodedText, decodedResult) => {
-            // 読み取ったらすぐ止める
-            html5QrCode.stop().then(() => {
-              btnStartScan.disabled = false;
-              btnStopScan.disabled = true;
-            });
-            handleQrPayload(decodedText);
-          },
-          (errorMessage) => {
-            // 読み取り失敗はログにだけ出す
-            // log('QR scan error: ' + errorMessage);
-          }
-        ).then(() => {
-          btnStartScan.disabled = true;
-          btnStopScan.disabled = false;
-          log('QR読み取り開始');
-        }).catch(err => {
-          alert('QR読み取り開始に失敗しました: ' + err);
-        });
-      });
-    });
-
-    // QR 読み取り停止
-    btnStopScan.addEventListener('click', () => {
-      if (html5QrCode) {
-        html5QrCode.stop().then(() => {
-          btnStartScan.disabled = false;
-          btnStopScan.disabled = true;
-          log('QR読み取り停止');
-        });
-      }
-    });
-
-    // チャット送信
-    chatSend.addEventListener('click', () => {
-      const text = chatInput.value.trim();
-      if (!text) return;
-      if (!dataChannel || dataChannel.readyState !== 'open') {
-        alert('データチャネルが開いていません');
-        return;
-      }
-      dataChannel.send(text);
-      appendChatMessage(text, true);
-      chatInput.value = '';
-    });
-
-    chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        chatSend.click();
-      }
-    });
-
-    // role 切り替え
-    for (const r of roleRadios) {
-      r.addEventListener('change', () => {
-        currentRole = checkedRole();
-      });
-    }
-  </script>
+</script>
 </body>
 </html>
