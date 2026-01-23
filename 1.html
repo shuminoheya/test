@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>救急用 現在位置表示</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { font-size: 2rem; padding: 16px 32px; margin: 10px 0; }
+    #result { margin-top: 20px; font-size: 1.6rem; line-height: 2; }
+    #status { color: red; font-size: 1.2rem; }
+    .label { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>救急用 現在位置表示</h1>
+  <button onclick="getLocation()">現在位置を取得</button>
+
+  <div id="result">
+    <div><span class="label">緯度:</span> <span id="lat">-</span></div>
+    <div><span class="label">経度:</span> <span id="lng">-</span></div>
+    <div><span class="label">住所:</span> <span id="address">-</span></div>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    async function getLocation() {
+      const status = document.getElementById('status');
+      const latSpan = document.getElementById('lat');
+      const lngSpan = document.getElementById('lng');
+      const addrSpan = document.getElementById('address');
+
+      status.textContent = '現在位置取得中…';
+      addrSpan.textContent = '-';
+
+      if (!navigator.geolocation) {
+        status.textContent = 'この端末では位置情報が利用できません。';
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+
+          latSpan.textContent = lat.toFixed(6);
+          lngSpan.textContent = lng.toFixed(6);
+
+          try {
+            const url =
+              `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ja`;
+            const res = await fetch(url, {
+              headers: { 'User-Agent': 'EmergencyLocationTool/1.0' }
+            });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+
+            addrSpan.textContent =
+              data.display_name || '住所を特定できませんでした';
+            status.textContent = '';
+          } catch (e) {
+            addrSpan.textContent = '住所取得エラー';
+            status.textContent = '住所の取得に失敗しました。';
+          }
+        },
+        (err) => {
+          status.textContent = '位置情報の取得に失敗しました。';
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+  </script>
+</body>
+</html>
