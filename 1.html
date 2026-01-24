@@ -2,15 +2,25 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>現在位置の行政区域名（国土地理院）</title>
+  <title>現在位置の住所表示（OpenCage）</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { font-size: 1.8rem; padding: 12px 24px; margin: 10px 0; }
+    #result { margin-top: 20px; font-size: 1.4rem; line-height: 2; }
+    #status { color: red; font-size: 1.2rem; }
+    .label { font-weight: bold; }
+  </style>
 </head>
 <body>
-  <h1>現在位置の行政区域名</h1>
+  <h1>現在位置の住所表示</h1>
   <button onclick="getLocation()">現在位置を取得</button>
-  <p>緯度: <span id="lat">-</span></p>
-  <p>経度: <span id="lng">-</span></p>
-  <p>住所: <span id="address">-</span></p>
-  <p id="status" style="color:red;"></p>
+
+  <div id="result">
+    <div><span class="label">緯度:</span> <span id="lat">-</span></div>
+    <div><span class="label">経度:</span> <span id="lng">-</span></div>
+    <div><span class="label">住所:</span> <span id="address">-</span></div>
+    <div id="status"></div>
+  </div>
 
   <script>
     async function getLocation() {
@@ -36,14 +46,22 @@
           lngSpan.textContent = lng.toFixed(6);
 
           try {
-            const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`;
+            const apiKey = '0d5c767a1bc14313828361a42b5cebfe'; // ← OpenCageのAPIキー
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja&countrycode=jp`;
+
             const res = await fetch(url);
             if (!res.ok) throw new Error('APIリクエスト失敗');
 
             const data = await res.json();
-            const address = data.results.pref + data.results.city + data.results.town;
-            addrSpan.textContent = address;
-            status.textContent = '';
+            if (data && data.results && data.results.length > 0) {
+              const result = data.results[0];
+              const address = result.formatted || '住所を特定できませんでした';
+              addrSpan.textContent = address;
+              status.textContent = '';
+            } else {
+              addrSpan.textContent = '住所を特定できませんでした';
+              status.textContent = '住所の取得に失敗しました。';
+            }
           } catch (e) {
             console.error(e);
             addrSpan.textContent = '住所取得エラー';
