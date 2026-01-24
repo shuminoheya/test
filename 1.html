@@ -2,32 +2,22 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>救急用 現在位置表示</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    button { font-size: 2rem; padding: 16px 32px; margin: 10px 0; }
-    #result { margin-top: 20px; font-size: 1.6rem; line-height: 2; }
-    #status { color: red; font-size: 1.2rem; }
-    .label { font-weight: bold; }
-  </style>
+  <title>現在位置の住所表示</title>
 </head>
 <body>
-  <h1>救急用 現在位置表示</h1>
+  <h1>現在位置の住所表示</h1>
   <button onclick="getLocation()">現在位置を取得</button>
-
-  <div id="result">
-    <div><span class="label">緯度:</span> <span id="lat">-</span></div>
-    <div><span class="label">経度:</span> <span id="lng">-</span></div>
-    <div><span class="label">住所:</span> <span id="address">-</span></div>
-    <div id="status"></div>
-  </div>
+  <p>緯度: <span id="lat">-</span></p>
+  <p>経度: <span id="lng">-</span></p>
+  <p>住所: <span id="address">-</span></p>
+  <p id="status" style="color:red;"></p>
 
   <script>
     async function getLocation() {
-      const status = document.getElementById('status');
       const latSpan = document.getElementById('lat');
       const lngSpan = document.getElementById('lng');
       const addrSpan = document.getElementById('address');
+      const status = document.getElementById('status');
 
       status.textContent = '現在位置取得中…';
       addrSpan.textContent = '-';
@@ -46,25 +36,27 @@
           lngSpan.textContent = lng.toFixed(6);
 
           try {
-            // Base64で難読化されたAPIキー（例：'abcd1234...' → 'YWJjZDEyMzQ='）
-            const encodedKey = 'T1BDR0VfQVBJX0tFWV9IRVJF'; // ← 自分のAPIキーをBase64で変換して入れてね
-            const apiKey = atob(encodedKey);
+            const apiKey = '0d5c767a1bc14313828361a42b5cebfe'; // ← ここにAPIキーを直接書く
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja`;
 
-            const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja&pretty=1`;
             const res = await fetch(url);
-            if (!res.ok) throw new Error();
-            const data = await res.json();
+            if (!res.ok) throw new Error('APIリクエスト失敗');
 
-            const result = data.results[0];
-            const address = result.formatted || '住所を特定できませんでした';
-            addrSpan.textContent = address;
-            status.textContent = '';
+            const data = await res.json();
+            if (data && data.results && data.results.length > 0) {
+              addrSpan.textContent = data.results[0].formatted;
+              status.textContent = '';
+            } else {
+              addrSpan.textContent = '住所を特定できませんでした';
+              status.textContent = '住所の取得に失敗しました。';
+            }
           } catch (e) {
+            console.error(e);
             addrSpan.textContent = '住所取得エラー';
             status.textContent = '住所の取得に失敗しました。';
           }
         },
-        (err) => {
+        () => {
           status.textContent = '位置情報の取得に失敗しました。';
         },
         {
