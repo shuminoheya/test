@@ -54,14 +54,16 @@
             const data = await res.json();
 
             const address = data.address || {};
-            const prefecture = address.state || '';
-            const city = address.city || address.town || address.village || '';
-            const ward = address.city_district || '';
-            const suburb = address.suburb || '';
-            const road = address.road || '';
-            const houseNumber = address.house_number || '';
+            let fullAddress = data.display_name || '';
 
-            const fullAddress = `${prefecture}${city}${ward}${suburb}${road}${houseNumber}`;
+            // 補完：display_name に含まれていない場合のみ追加
+            if (address.road && !fullAddress.includes(address.road)) {
+              fullAddress += ` ${address.road}`;
+            }
+            if (address.house_number && !fullAddress.includes(address.house_number)) {
+              fullAddress += ` ${address.house_number}`;
+            }
+
             addrSpan.textContent = fullAddress || '住所を特定できませんでした';
             status.textContent = '';
           } catch (e) {
