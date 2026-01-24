@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>現在位置の住所表示</title>
+  <title>現在位置の住所表示（OpenCage）</title>
 </head>
 <body>
   <h1>現在位置の住所表示</h1>
@@ -36,7 +36,7 @@
           lngSpan.textContent = lng.toFixed(6);
 
           try {
-            const apiKey = '0d5c767a1bc14313828361a42b5cebfe'; // ← ここにAPIキーを直接書く
+            const apiKey = '0d5c767a1bc14313828361a42b5cebfe'; // ← OpenCageのAPIキー
             const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja`;
 
             const res = await fetch(url);
@@ -44,7 +44,8 @@
 
             const data = await res.json();
             if (data && data.results && data.results.length > 0) {
-              addrSpan.textContent = data.results[0].formatted;
+              const address = data.results[0].formatted;
+              addrSpan.textContent = address;
               status.textContent = '';
             } else {
               addrSpan.textContent = '住所を特定できませんでした';
