@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>現在位置の住所表示（OpenCage）</title>
+  <title>現在位置の住所表示（日本限定）</title>
 </head>
 <body>
   <h1>現在位置の住所表示</h1>
@@ -37,7 +37,7 @@
 
           try {
             const apiKey = '0d5c767a1bc14313828361a42b5cebfe'; // ← OpenCageのAPIキー
-            const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja`;
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja&countrycode=jp`;
 
             const res = await fetch(url);
             if (!res.ok) throw new Error('APIリクエスト失敗');
