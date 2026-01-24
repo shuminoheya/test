@@ -46,25 +46,18 @@
           lngSpan.textContent = lng.toFixed(6);
 
           try {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ja`;
-            const res = await fetch(url, {
-              headers: { 'User-Agent': 'EmergencyLocationTool/1.0' }
-            });
+            // Base64で難読化されたAPIキー（例：'abcd1234...' → 'YWJjZDEyMzQ='）
+            const encodedKey = 'T1BDR0VfQVBJX0tFWV9IRVJF'; // ← 自分のAPIキーをBase64で変換して入れてね
+            const apiKey = atob(encodedKey);
+
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&language=ja&pretty=1`;
+            const res = await fetch(url);
             if (!res.ok) throw new Error();
             const data = await res.json();
 
-            const address = data.address || {};
-            let fullAddress = data.display_name || '';
-
-            // 補完：display_name に含まれていない場合のみ追加
-            if (address.road && !fullAddress.includes(address.road)) {
-              fullAddress += ` ${address.road}`;
-            }
-            if (address.house_number && !fullAddress.includes(address.house_number)) {
-              fullAddress += ` ${address.house_number}`;
-            }
-
-            addrSpan.textContent = fullAddress || '住所を特定できませんでした';
+            const result = data.results[0];
+            const address = result.formatted || '住所を特定できませんでした';
+            addrSpan.textContent = address;
             status.textContent = '';
           } catch (e) {
             addrSpan.textContent = '住所取得エラー';
