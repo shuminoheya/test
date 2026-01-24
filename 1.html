@@ -46,16 +46,23 @@
           lngSpan.textContent = lng.toFixed(6);
 
           try {
-            const url =
-              `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ja`;
+            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ja`;
             const res = await fetch(url, {
               headers: { 'User-Agent': 'EmergencyLocationTool/1.0' }
             });
             if (!res.ok) throw new Error();
             const data = await res.json();
 
-            addrSpan.textContent =
-              data.display_name || '住所を特定できませんでした';
+            const address = data.address || {};
+            const prefecture = address.state || '';
+            const city = address.city || address.town || address.village || '';
+            const ward = address.city_district || '';
+            const suburb = address.suburb || '';
+            const road = address.road || '';
+            const houseNumber = address.house_number || '';
+
+            const fullAddress = `${prefecture}${city}${ward}${suburb}${road}${houseNumber}`;
+            addrSpan.textContent = fullAddress || '住所を特定できませんでした';
             status.textContent = '';
           } catch (e) {
             addrSpan.textContent = '住所取得エラー';
