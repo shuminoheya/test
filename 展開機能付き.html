@@ -13,11 +13,11 @@
 </head>
 <body>
   <div class="box">
-    <h2>復号（チャンク保存 → 統合）</h2>
+    <h2>復号（チャンク保存 → 統合）あ</h2>
     <input type="file" id="fileInput" accept=".shumi">
     <input type="password" id="password" placeholder="パスワードを入力">
     <button id="decryptBtn">復号実行</button>
-    <progress id="progressBar" value="0" max="100"></progress>
+    <progress id="progressBar" value="0"></progress>
     <div id="status">待機中...</div>
   </div>
 
@@ -56,6 +56,9 @@
       let chunkIndex = 0;
       const chunkNames = [];
 
+      progressBar.max = fileBuffer.byteLength;
+      progressBar.value = 0;
+
       try {
         // 復号してチャンクごとに保存
         while (offset + 16 <= fileBuffer.byteLength) {
@@ -73,8 +76,9 @@
 
           offset += 16 + encryptedLength;
           chunkIndex++;
+          progressBar.value = offset;
           status.textContent = `復号中: チャンク ${chunkIndex}`;
-          progressBar.value = (offset / fileBuffer.byteLength) * 100;
+          await new Promise(requestAnimationFrame); // UI更新を確実に
         }
 
         // 統合ファイル作成
@@ -88,6 +92,7 @@
             const file = await handle.getFile();
             const buffer = await file.arrayBuffer();
             await finalWritable.write(buffer);
+            await new Promise(requestAnimationFrame); // UI更新のため
           }
 
           await finalWritable.close();
@@ -98,7 +103,7 @@
           }
 
           status.textContent = '復号完了！（.shumiに統合）';
-          progressBar.value = 100;
+          progressBar.value = progressBar.max;
         } catch (mergeErr) {
           console.error('統合エラー:', mergeErr);
           status.textContent = '統合エラー';
