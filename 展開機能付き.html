@@ -115,9 +115,7 @@
       const key = await deriveKey(password);
       const outputChunks = [];
       let writableStream = null;
-      let totalChunks = mode === 'encrypt'
-        ? Math.ceil(file.size / CHUNK_SIZE)
-        : null;
+      let totalChunks = mode === 'encrypt' ? Math.ceil(file.size / CHUNK_SIZE) : null;
       if (lowMemory && window.showSaveFilePicker) {
         try {
           const suggestedName = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
@@ -199,14 +197,13 @@
         status.textContent = 'エラー：' + err.message;
       }
     });
-
     async function deriveKey(password) {
       const enc = new TextEncoder();
       const salt = enc.encode('shumi-salt');
       const keyMaterial = await crypto.subtle.importKey(
         'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
       );
-      return crypto.subtle.deriveKey(
+        return crypto.subtle.deriveKey(
         {
           name: 'PBKDF2',
           salt: salt,
@@ -225,6 +222,3 @@
   </script>
 </body>
 </html>
-
-        progressBar.value = progressBar.max;
-      } catch (
