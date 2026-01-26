@@ -223,7 +223,7 @@
         a.href = URL.createObjectURL(blob);
         a.download = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
         a.click();
-             status.textContent = '完了しました！（ダウンロード）';
+        status.textContent = '完了しました！（ダウンロード）';
         progressBar.value = progressBar.max;
       }
     });
