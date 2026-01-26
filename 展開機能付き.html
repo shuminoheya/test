@@ -2,111 +2,33 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ファイル暗号化・復号化</title>
+  <title>復号テスト</title>
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(to right, #f0f4f8, #e0ecf4);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-    }
-    .container {
-      background: white;
-      padding: 30px 40px;
-      border-radius: 12px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-      width: 400px;
-      text-align: center;
-    }
-    h1 { font-size: 1.5em; margin-bottom: 10px; color: #333; }
-    label { margin: 0 10px; font-weight: bold; color: #444; }
-    input[type="file"], input[type="password"] {
-      margin: 10px 0; width: 100%; padding: 10px;
-      border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
-    }
-    button {
-      background-color: #4CAF50; color: white;
-      padding: 12px 20px; border: none; border-radius: 6px;
-      cursor: pointer; font-size: 1em; margin-top: 10px;
-      transition: background-color 0.3s ease;
-    }
-    button:hover { background-color: #45a049; }
-    progress {
-      width: 100%; height: 20px; margin-top: 20px; appearance: none;
-    }
-    progress::-webkit-progress-bar {
-      background-color: #eee; border-radius: 10px;
-    }
-    progress::-webkit-progress-value {
-      background-color: #4CAF50; border-radius: 10px;
-    }
-    #status { margin-top: 10px; font-size: 0.95em; color: #555; }
+    body { font-family: sans-serif; padding: 2em; background: #f0f4f8; }
+    .box { background: white; padding: 20px; border-radius: 8px; max-width: 500px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    input, button { margin: 10px 0; width: 100%; padding: 10px; font-size: 1em; }
+    progress { width: 100%; height: 20px; }
+    #status { margin-top: 10px; color: #333; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>ファイル暗号化・復号化</h1>
-    <p>このページはファイルを趣味の部屋独自のフォーマットで暗号化してそのファイルを復号化できるサイトです。</p>
-
-    <label><input type="radio" name="mode" value="encrypt" checked> 暗号化</label>
-    <label><input type="radio" name="mode" value="decrypt"> 復号化</label><br><br>
-
-    <input type="file" id="fileInput"><br>
-    <input type="password" id="password" placeholder="パスワードを入力"><br>
-    <label><input type="checkbox" id="lowMemoryMode"> パフォーマンス低下モード（フォルダに保存）</label><br><br>
-    <button id="processBtn">実行</button>
-
+  <div class="box">
+    <h2>復号テスト（ディスク保存専用）</h2>
+    <input type="file" id="fileInput" accept=".shumi">
+    <input type="password" id="password" placeholder="パスワードを入力">
+    <label><input type="checkbox" id="lowMemoryMode" checked disabled> パフォーマンス低下モード（必須）</label>
+    <button id="decryptBtn">復号実行</button>
     <progress id="progressBar" value="0" max="100"></progress>
-    <p id="status">待機中...</p>
+    <div id="status">待機中...</div>
   </div>
 
   <script>
     const CHUNK_SIZE = 15 * 1024 * 1024;
     let folderHandle = null;
 
-    function removeShumiExtension(filename) {
-      return filename.endsWith('.shumi') ? filename.slice(0, -6) : filename;
-    }
-
-    document.querySelectorAll('input[name="mode"]').forEach(radio => {
-      radio.addEventListener('change', () => {
-        const mode = document.querySelector('input[name="mode"]:checked').value;
-        const fileInput = document.getElementById('fileInput');
-        fileInput.value = '';
-        fileInput.setAttribute('accept', mode === 'decrypt' ? '.shumi' : '');
-      });
-    });
-
-    document.getElementById('lowMemoryMode').addEventListener('change', async (e) => {
-      const status = document.getElementById('status');
-      if (e.target.checked) {
-        if (!window.showDirectoryPicker) {
-          alert('このブラウザはフォルダ選択に対応していません。');
-          e.target.checked = false;
-          return;
-        }
-        try {
-          folderHandle = await window.showDirectoryPicker();
-          status.textContent = '保存先フォルダが選択されました。';
-        } catch (err) {
-          status.textContent = 'フォルダの選択がキャンセルされました。';
-          e.target.checked = false;
-          folderHandle = null;
-        }
-      } else {
-        folderHandle = null;
-        status.textContent = '待機中...';
-      }
-    });
-
-    document.getElementById('processBtn').addEventListener('click', async () => {
+    document.getElementById('decryptBtn').addEventListener('click', async () => {
       const file = document.getElementById('fileInput').files[0];
       const password = document.getElementById('password').value;
-      const mode = document.querySelector('input[name="mode"]:checked').value;
-      const lowMemory = document.getElementById('lowMemoryMode').checked;
       const status = document.getElementById('status');
       const progressBar = document.getElementById('progressBar');
 
@@ -115,118 +37,65 @@
         return;
       }
 
-      if (lowMemory && !folderHandle) {
-        alert('保存先フォルダが選択されていません。');
+      if (!window.showDirectoryPicker) {
+        alert('このブラウザはフォルダ選択に対応していません。');
         return;
       }
 
-      const key = await deriveKey(password);
-      const chunks = [];
-
-      let fileName = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
-      const tempName = fileName + '.crswap';
-      let writableStream = null;
-
-      if (lowMemory) {
-        const tempHandle = await folderHandle.getFileHandle(tempName, { create: true });
-        writableStream = await tempHandle.createWritable();
+      try {
+        folderHandle = await window.showDirectoryPicker();
+      } catch (err) {
+        status.textContent = 'フォルダの選択がキャンセルされました。';
+        return;
       }
 
-      if (mode === 'encrypt') {
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunk = await file.slice(start, end).arrayBuffer();
+      const fileName = file.name.endsWith('.shumi') ? file.name.slice(0, -6) : file.name;
+      const tempName = fileName + '.crswap';
 
-          status.textContent = `暗号化中: チャンク ${i + 1} / ${totalChunks}`;
-          progressBar.value = ((i + 1) / totalChunks) * 100;
+      const key = await deriveKey(password);
+      const fileBuffer = await file.arrayBuffer();
+      const dataView = new DataView(fileBuffer);
+      let offset = 0;
+      let chunkIndex = 0;
 
-          const iv = crypto.getRandomValues(new Uint8Array(12));
-          const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, chunk);
-          const encryptedBytes = new Uint8Array(encrypted);
-          const lengthBytes = new Uint8Array(4);
-          new DataView(lengthBytes.buffer).setUint32(0, encryptedBytes.length, true);
-
-          const combined = new Uint8Array(4 + 12 + encryptedBytes.length);
-          combined.set(lengthBytes, 0);
-          combined.set(iv, 4);
-          combined.set(encryptedBytes, 16);
-
-          if (writableStream) {
-            await writableStream.write(combined);
-          } else {
-            chunks.push(combined);
-          }
-        }
-      } else {
-        const fileBuffer = await file.arrayBuffer();
-        const dataView = new DataView(fileBuffer);
-        let offset = 0;
-        let chunkIndex = 0;
+      try {
+        const tempHandle = await folderHandle.getFileHandle(tempName, { create: true });
+        const writable = await tempHandle.createWritable();
 
         while (offset + 16 <= fileBuffer.byteLength) {
           const encryptedLength = dataView.getUint32(offset, true);
           const iv = new Uint8Array(fileBuffer.slice(offset + 4, offset + 16));
           const encryptedData = fileBuffer.slice(offset + 16, offset + 16 + encryptedLength);
 
-          status.textContent = `復号化中: チャンク ${++chunkIndex}`;
+          status.textContent = `復号中: チャンク ${++chunkIndex}`;
           progressBar.value = (offset / fileBuffer.byteLength) * 100;
 
-          try {
-            const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData);
-            if (writableStream) {
-              await writableStream.write(new Uint8Array(decrypted));
-            } else {
-              chunks.push(new Uint8Array(decrypted));
-            }
-          } catch (e) {
-            alert('復号に失敗しました。パスワードが正しいか、ファイルが壊れていないか確認してください。');
-            status.textContent = '復号エラー';
-            return;
-          }
+          const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData);
+          await writable.write(new Uint8Array(decrypted));
 
           offset += 16 + encryptedLength;
         }
-      }
 
-      if (writableStream) {
-        await writableStream.close();
+        await writable.close();
 
+        // 上書き防止のため既存ファイル削除
         try {
-          const tempHandle = await folderHandle.getFileHandle(tempName);
-          const tempFile = await tempHandle.getFile();
-          const tempData = await tempFile.arrayBuffer();
+          await folderHandle.removeEntry(fileName);
+        } catch (e) {}
 
-          // 既存ファイルがあれば削除してから作成
-          try {
-            await folderHandle.removeEntry(fileName);
-          } catch (e) {
-            // 存在しない場合は無視
-          }
+        const finalHandle = await folderHandle.getFileHandle(fileName, { create: true });
+        const finalWritable = await finalHandle.createWritable();
+        const tempFile = await (await tempHandle.getFile()).arrayBuffer();
+        await finalWritable.write(tempFile);
+        await finalWritable.close();
 
-          const finalHandle = await folderHandle.getFileHandle(fileName, { create: true });
-          const finalWritable = await finalHandle.createWritable();
-          await finalWritable.write(tempData);
-          await finalWritable.close();
+        await folderHandle.removeEntry(tempName);
 
-          // .crswap を削除
-          await folderHandle.removeEntry(tempName);
-
-          status.textContent = '完了しました！（フォルダに保存）';
-          progressBar.value = 100;
-        } catch (err) {
-          console.error('保存処理中にエラーが発生しました:', err);
-          status.textContent = '保存エラー';
-        }
-      } else {
-        const blob = new Blob(chunks);
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        a.click();
-        status.textContent = '完了しました！（ダウンロード）';
+        status.textContent = '復号完了！（ディスク保存）';
         progressBar.value = 100;
+      } catch (err) {
+        console.error(err);
+        status.textContent = '復号エラー：' + err.message;
       }
     });
 
@@ -234,26 +103,14 @@
       const enc = new TextEncoder();
       const salt = enc.encode('shumi-salt');
       const keyMaterial = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(password),
-        { name: 'PBKDF2' },
-        false,
-        ['deriveKey']
+        'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
       );
       return crypto.subtle.deriveKey(
-        {
-          name: 'PBKDF2',
-          salt: salt,
-          iterations: 100000,
-          hash: 'SHA-256'
-        },
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
         keyMaterial,
-        {
-          name: 'AES-GCM',
-          length: 256
-        },
+        { name: 'AES-GCM', length: 256 },
         false,
-        ['encrypt', 'decrypt']
+        ['decrypt']
       );
     }
   </script>
