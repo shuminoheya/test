@@ -89,12 +89,7 @@
             const handle = await folderHandle.getFileHandle(name);
             const file = await handle.getFile();
             const stream = file.stream();
-            const reader = stream.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              await finalWritable.write(value);
-            }
+            await stream.pipeTo(finalWritable, { preventClose: true });
           }
 
           await finalWritable.close();
