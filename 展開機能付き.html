@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>復号チャンク統合テスト</title>
+  <title>巨大ファイル復号対応</title>
   <style>
     body { font-family: sans-serif; padding: 2em; background: #f0f4f8; }
     .box { background: white; padding: 20px; border-radius: 8px; max-width: 500px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
@@ -13,7 +13,7 @@
 </head>
 <body>
   <div class="box">
-    <h2>復号（チャンク保存 → 統合）あ</h2>
+    <h2>復号（100GB対応・チャンク統合）</h2>
     <input type="file" id="fileInput" accept=".shumi">
     <input type="password" id="password" placeholder="パスワードを入力">
     <button id="decryptBtn">復号実行</button>
@@ -22,8 +22,6 @@
   </div>
 
   <script>
-    const CHUNK_SIZE = 15 * 1024 * 1024;
-
     document.getElementById('decryptBtn').addEventListener('click', async () => {
       const file = document.getElementById('fileInput').files[0];
       const password = document.getElementById('password').value;
@@ -50,24 +48,24 @@
 
       const fileName = file.name.endsWith('.shumi') ? file.name.slice(0, -6) : file.name;
       const key = await deriveKey(password);
-      const fileBuffer = await file.arrayBuffer();
-      const dataView = new DataView(fileBuffer);
+      const chunkNames = [];
       let offset = 0;
       let chunkIndex = 0;
-      const chunkNames = [];
 
-      progressBar.max = fileBuffer.byteLength;
+      progressBar.max = file.size;
       progressBar.value = 0;
 
       try {
-        // 復号してチャンクごとに保存
-        while (offset + 16 <= fileBuffer.byteLength) {
-          const encryptedLength = dataView.getUint32(offset, true);
-          const iv = new Uint8Array(fileBuffer.slice(offset + 4, offset + 16));
-          const encryptedData = fileBuffer.slice(offset + 16, offset + 16 + encryptedLength);
+        while (offset + 16 <= file.size) {
+          const header = await file.slice(offset, offset + 16).arrayBuffer();
+          const view = new DataView(header);
+          const encryptedLength = view.getUint32(0, true);
+          const iv = new Uint8Array(header.slice(4, 16));
 
+          const encryptedData = await file.slice(offset + 16, offset + 16 + encryptedLength).arrayBuffer();
           const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData);
-          const chunkName = `chunk_${String(chunkIndex).padStart(4, '0')}.tmp`;
+
+          const chunkName = `chunk_${String(chunkIndex).padStart(6, '0')}.tmp`;
           const chunkHandle = await folderHandle.getFileHandle(chunkName, { create: true });
           const writable = await chunkHandle.createWritable();
           await writable.write(new Uint8Array(decrypted));
@@ -78,7 +76,7 @@
           chunkIndex++;
           progressBar.value = offset;
           status.textContent = `復号中: チャンク ${chunkIndex}`;
-          await new Promise(requestAnimationFrame); // UI更新を確実に
+          await new Promise(requestAnimationFrame);
         }
 
         // 統合ファイル作成
@@ -90,9 +88,13 @@
           for (const name of chunkNames) {
             const handle = await folderHandle.getFileHandle(name);
             const file = await handle.getFile();
-            const buffer = await file.arrayBuffer();
-            await finalWritable.write(buffer);
-            await new Promise(requestAnimationFrame); // UI更新のため
+            const stream = file.stream();
+            const reader = stream.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              await finalWritable.write(value);
+            }
           }
 
           await finalWritable.close();
