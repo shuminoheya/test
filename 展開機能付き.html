@@ -95,6 +95,7 @@
 
     <input type="file" id="fileInput"><br>
     <input type="password" id="password" placeholder="パスワードを入力"><br>
+    <label><input type="checkbox" id="lowMemoryMode"> パフォーマンス低下モード（低メモリ）</label><br><br>
     <button id="processBtn">実行</button>
 
     <progress id="progressBar" value="0" max="100"></progress>
@@ -121,6 +122,7 @@
       const file = document.getElementById('fileInput').files[0];
       const password = document.getElementById('password').value;
       const mode = document.querySelector('input[name="mode"]:checked').value;
+      const lowMemory = document.getElementById('lowMemoryMode').checked;
       const status = document.getElementById('status');
       const progressBar = document.getElementById('progressBar');
 
@@ -129,28 +131,26 @@
         return;
       }
 
-      if (!window.showSaveFilePicker) {
-        alert('このブラウザは保存に対応していません。');
-        return;
-      }
-
       const key = await deriveKey(password);
-      const suggestedName = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
+      const outputChunks = [];
+      let writableStream = null;
 
-      let writableStream;
-      try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName,
-          types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }]
-        });
-        writableStream = await handle.createWritable();
-      } catch (e) {
-        status.textContent = '保存先の選択がキャンセルされました。';
-        return;
+      if (lowMemory && window.showSaveFilePicker) {
+        try {
+          const suggestedName = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
+          const handle = await window.showSaveFilePicker({
+            suggestedName,
+            types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }]
+          });
+          writableStream = await handle.createWritable();
+        } catch (e) {
+          status.textContent = '保存先の選択がキャンセルされました。メモリ保持モードに切り替えます。';
+          writableStream = null;
+        }
       }
 
-      progressBar.max = file.size;
       progressBar.value = 0;
+      progressBar.max = file.size;
 
       try {
         if (mode === 'encrypt') {
@@ -170,7 +170,11 @@
             combined.set(iv, 4);
             combined.set(encryptedBytes, 16);
 
-            await writableStream.write(combined);
+            if (writableStream) {
+              await writableStream.write(combined);
+            } else {
+              outputChunks.push(combined);
+            }
 
             offset += CHUNK_SIZE;
             chunkIndex++;
@@ -178,9 +182,6 @@
             status.textContent = `暗号化中: チャンク ${chunkIndex}`;
             await new Promise(requestAnimationFrame);
           }
-
-          await writableStream.close();
-          status.textContent = '暗号化完了！（保存されました）';
         } else {
           let offset = 0;
           let chunkIndex = 0;
@@ -193,7 +194,12 @@
             const encryptedData = await file.slice(offset + 16, offset + 16 + encryptedLength).arrayBuffer();
 
             const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData);
-            await writableStream.write(new Uint8Array(decrypted));
+
+            if (writableStream) {
+              await writableStream.write(new Uint8Array(decrypted));
+            } else {
+              outputChunks.push(new Uint8Array(decrypted));
+            }
 
             offset += 16 + encryptedLength;
             chunkIndex++;
@@ -201,14 +207,23 @@
             status.textContent = `復号中: チャンク ${chunkIndex}`;
             await new Promise(requestAnimationFrame);
           }
+        }
 
+        if (writableStream) {
           await writableStream.close();
-          status.textContent = '復号完了！（保存されました）';
+          status.textContent = '完了しました！（保存されました）';
+        } else {
+          const blob = new Blob(outputChunks);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
+          a.click();
+          status.textContent = '完了しました！（ダウンロード）';
         }
 
         progressBar.value = progressBar.max;
       } catch (err) {
-        console.error('処理エラー:', err);
+        console.error('エラー:', err);
         status.textContent = 'エラー：' + err.message;
       }
     });
@@ -220,9 +235,17 @@
         'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
       );
       return crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        {
+          name: 'PBKDF2',
+          salt: salt,
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
         keyMaterial,
-        { name: 'AES-GCM', length: 256 },
+        {
+          name: 'AES-GCM',
+          length: 256
+        },
         false,
         ['encrypt', 'decrypt']
       );
@@ -230,3 +253,4 @@
   </script>
 </body>
 </html>
+
