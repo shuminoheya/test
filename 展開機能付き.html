@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>巨大ファイル復号対応</title>
+  <title>復号（直接書き込み）</title>
   <style>
     body { font-family: sans-serif; padding: 2em; background: #f0f4f8; }
     .box { background: white; padding: 20px; border-radius: 8px; max-width: 500px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
@@ -13,7 +13,7 @@
 </head>
 <body>
   <div class="box">
-    <h2>復号（100GB対応・チャンク統合）</h2>
+    <h2>復号（.shumi に直接追記）</h2>
     <input type="file" id="fileInput" accept=".shumi">
     <input type="password" id="password" placeholder="パスワードを入力">
     <button id="decryptBtn">復号実行</button>
@@ -46,9 +46,8 @@
         return;
       }
 
-      const fileName = file.name.endsWith('.shumi') ? file.name.slice(0, -6) : file.name;
+      const outputName = file.name.endsWith('.shumi') ? file.name.slice(0, -6) : file.name;
       const key = await deriveKey(password);
-      const chunkNames = [];
       let offset = 0;
       let chunkIndex = 0;
 
@@ -56,6 +55,13 @@
       progressBar.value = 0;
 
       try {
+        // 出力ファイル作成
+        try {
+          await folderHandle.removeEntry(outputName).catch(() => {});
+        } catch (_) {}
+        const outputHandle = await folderHandle.getFileHandle(outputName, { create: true });
+        const outputStream = await outputHandle.createWritable();
+
         while (offset + 16 <= file.size) {
           const header = await file.slice(offset, offset + 16).arrayBuffer();
           const view = new DataView(header);
@@ -65,12 +71,7 @@
           const encryptedData = await file.slice(offset + 16, offset + 16 + encryptedLength).arrayBuffer();
           const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData);
 
-          const chunkName = `chunk_${String(chunkIndex).padStart(6, '0')}.tmp`;
-          const chunkHandle = await folderHandle.getFileHandle(chunkName, { create: true });
-          const writable = await chunkHandle.createWritable();
-          await writable.write(new Uint8Array(decrypted));
-          await writable.close();
-          chunkNames.push(chunkName);
+          await outputStream.write(new Uint8Array(decrypted));
 
           offset += 16 + encryptedLength;
           chunkIndex++;
@@ -79,32 +80,9 @@
           await new Promise(requestAnimationFrame);
         }
 
-        // 統合ファイル作成
-        try {
-          await folderHandle.removeEntry(fileName).catch(() => {});
-          const finalHandle = await folderHandle.getFileHandle(fileName, { create: true });
-          const finalWritable = await finalHandle.createWritable();
-
-          for (const name of chunkNames) {
-            const handle = await folderHandle.getFileHandle(name);
-            const file = await handle.getFile();
-            const stream = file.stream();
-            await stream.pipeTo(finalWritable, { preventClose: true });
-          }
-
-          await finalWritable.close();
-
-          // チャンク削除
-          for (const name of chunkNames) {
-            await folderHandle.removeEntry(name);
-          }
-
-          status.textContent = '復号完了！（.shumiに統合）';
-          progressBar.value = progressBar.max;
-        } catch (mergeErr) {
-          console.error('統合エラー:', mergeErr);
-          status.textContent = '統合エラー';
-        }
+        await outputStream.close();
+        status.textContent = '復号完了！（.shumiに直接書き込み）';
+        progressBar.value = progressBar.max;
       } catch (err) {
         console.error('復号エラー:', err);
         status.textContent = '復号エラー：' + err.message;
