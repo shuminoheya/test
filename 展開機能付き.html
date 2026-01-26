@@ -145,7 +145,14 @@
         } else {
           const buf = await f.arrayBuffer();
           const dv = new DataView(buf);
-          let off = 0, i = 0;
+          let off = 0, total = 0;
+          while (off + 16 <= buf.byteLength) {
+            const len = dv.getUint32(off, true);
+            off += 16 + len;
+            total++;
+          }
+          off = 0;
+          let i = 0;
           while (off + 16 <= buf.byteLength) {
             const len = dv.getUint32(off, true);
             const iv = new Uint8Array(buf.slice(off + 4, off + 16));
@@ -155,7 +162,7 @@
             off += 16 + len;
             i++;
             b.value = off;
-            s.textContent = `復号中 ${i}`;
+            s.textContent = `復号中 ${i}/${total}`;
             await new Promise(requestAnimationFrame);
           }
         }
