@@ -13,7 +13,6 @@
       height: 100vh;
       margin: 0;
     }
-
     .container {
       background: white;
       padding: 30px 40px;
@@ -22,67 +21,29 @@
       width: 400px;
       text-align: center;
     }
-
-    h1 {
-      font-size: 1.5em;
-      margin-bottom: 10px;
-      color: #333;
+    h1 { font-size: 1.5em; margin-bottom: 10px; color: #333; }
+    label { margin: 0 10px; font-weight: bold; color: #444; }
+    input[type="file"], input[type="password"] {
+      margin: 10px 0; width: 100%; padding: 10px;
+      border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
     }
-
-    label {
-      margin: 0 10px;
-      font-weight: bold;
-      color: #444;
-    }
-
-    input[type="file"],
-    input[type="password"] {
-      margin: 10px 0;
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      box-sizing: border-box;
-    }
-
     button {
-      background-color: #4CAF50;
-      color: white;
-      padding: 12px 20px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 1em;
-      margin-top: 10px;
+      background-color: #4CAF50; color: white;
+      padding: 12px 20px; border: none; border-radius: 6px;
+      cursor: pointer; font-size: 1em; margin-top: 10px;
       transition: background-color 0.3s ease;
     }
-
-    button:hover {
-      background-color: #45a049;
-    }
-
+    button:hover { background-color: #45a049; }
     progress {
-      width: 100%;
-      height: 20px;
-      margin-top: 20px;
-      appearance: none;
+      width: 100%; height: 20px; margin-top: 20px; appearance: none;
     }
-
     progress::-webkit-progress-bar {
-      background-color: #eee;
-      border-radius: 10px;
+      background-color: #eee; border-radius: 10px;
     }
-
     progress::-webkit-progress-value {
-      background-color: #4CAF50;
-      border-radius: 10px;
+      background-color: #4CAF50; border-radius: 10px;
     }
-
-    #status {
-      margin-top: 10px;
-      font-size: 0.95em;
-      color: #555;
-    }
+    #status { margin-top: 10px; font-size: 0.95em; color: #555; }
   </style>
 </head>
 <body>
@@ -164,10 +125,12 @@
 
       let fileName = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
       let writableStream = null;
+      let finalHandle = null;
 
       if (lowMemory) {
-        const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
-        writableStream = await fileHandle.createWritable();
+        const tempHandle = await folderHandle.getFileHandle(fileName + '.crswap', { create: true });
+        writableStream = await tempHandle.createWritable();
+        finalHandle = await folderHandle.getFileHandle(fileName, { create: true });
       }
 
       if (mode === 'encrypt') {
@@ -230,6 +193,19 @@
 
       if (writableStream) {
         await writableStream.close();
+
+        // .crswap を本ファイルにコピーしてから削除
+        const tempHandle = await folderHandle.getFileHandle(fileName + '.crswap');
+        const tempFile = await tempHandle.getFile();
+        const tempData = await tempFile.arrayBuffer();
+
+        const finalWritable = await finalHandle.createWritable();
+        await finalWritable.write(tempData);
+        await finalWritable.close();
+
+        // .crswap ファイル削除
+        await folderHandle.removeEntry(fileName + '.crswap');
+
         status.textContent = '完了しました！（フォルダに保存）';
         progressBar.value = 100;
       } else {
