@@ -2,15 +2,17 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>保存先テスト</title>
+  <title>保存先選択テスト</title>
   <style>
     body {
       font-family: sans-serif;
       padding: 2em;
       background: #f0f4f8;
     }
-    label {
-      font-weight: bold;
+    button {
+      padding: 10px 20px;
+      font-size: 1em;
+      margin-top: 10px;
     }
     #status {
       margin-top: 1em;
@@ -21,36 +23,35 @@
 <body>
   <h2>保存先選択テスト</h2>
   <label>
-    <input type="checkbox" id="lowMemoryMode"> パフォーマンス低下モード（保存先を先に選ぶ）
+    <input type="checkbox" id="lowMemoryMode"> パフォーマンス低下モード
   </label>
+  <br>
+  <button id="selectSave">保存先を選ぶ</button>
   <p id="status">待機中...</p>
 
   <script>
     let writableStream = null;
 
-    document.getElementById('lowMemoryMode').addEventListener('change', async (e) => {
+    document.getElementById('selectSave').addEventListener('click', async () => {
       const status = document.getElementById('status');
+      const checkbox = document.getElementById('lowMemoryMode');
 
-      if (e.target.checked) {
-        if (!window.showSaveFilePicker) {
-          status.textContent = 'このブラウザは保存先の選択に対応していません。';
-          return;
-        }
+      if (!window.showSaveFilePicker) {
+        status.textContent = 'このブラウザは保存先の選択に対応していません。';
+        return;
+      }
 
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: 'output.shumi',
-            types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }]
-          });
-          writableStream = await handle.createWritable();
-          status.textContent = '保存先が選択されました。';
-        } catch (err) {
-          status.textContent = '保存先の選択がキャンセルされました。';
-          e.target.checked = false;
-        }
-      } else {
-        writableStream = null;
-        status.textContent = '待機中...';
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'output.shumi',
+          types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }]
+        });
+        writableStream = await handle.createWritable();
+        checkbox.checked = true;
+        status.textContent = '保存先が選択されました。';
+      } catch (err) {
+        checkbox.checked = false;
+        status.textContent = '保存先の選択がキャンセルされました。';
       }
     });
   </script>
