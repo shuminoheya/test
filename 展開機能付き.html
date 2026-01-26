@@ -2,19 +2,92 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>暗号化・復号</title>
+  <title>ファイル暗号化・復号化</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f0f4f8, #e0ecf4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: white;
+      padding: 30px 40px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      width: 400px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.5em;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    label {
+      margin: 0 10px;
+      font-weight: bold;
+      color: #444;
+    }
+    input[type="file"],
+    input[type="password"] {
+      margin: 10px 0;
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1em;
+      margin-top: 10px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    progress {
+      width: 100%;
+      height: 20px;
+      margin-top: 20px;
+      appearance: none;
+    }
+    progress::-webkit-progress-bar {
+      background-color: #eee;
+      border-radius: 10px;
+    }
+    progress::-webkit-progress-value {
+      background-color: #4CAF50;
+      border-radius: 10px;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 0.95em;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-  <h1>暗号化・復号</h1>
-  <label><input type="radio" name="mode" value="encrypt" checked>暗号化</label>
-  <label><input type="radio" name="mode" value="decrypt">復号</label><br>
-  <input type="file" id="fileInput"><br>
-  <input type="password" id="password" placeholder="パスワード"><br>
-  <label><input type="checkbox" id="lowMemory">低メモリモード</label><br>
-  <button id="run">実行</button>
-  <progress id="bar" value="0" max="100"></progress>
-  <div id="status">待機中</div>
-
+  <div class="container">
+    <h1>ファイル暗号化・復号化</h1>
+    <p>このページはファイルを趣味の部屋独自のフォーマットで暗号化してそのファイルを復号化できるサイトです。</p>
+    <label><input type="radio" name="mode" value="encrypt" checked> 暗号化</label>
+    <label><input type="radio" name="mode" value="decrypt"> 復号化</label><br><br>
+    <input type="file" id="fileInput"><br>
+    <input type="password" id="password" placeholder="パスワードを入力"><br>
+    <label><input type="checkbox" id="lowMemory"> パフォーマンス低下モード（低メモリ）</label><br><br>
+    <button id="run">実行</button>
+    <progress id="bar" value="0" max="100"></progress>
+    <p id="status">待機中</p>
+  </div>
   <script>
     const CHUNK = 15 * 1024 * 1024;
     function removeExt(name) {
