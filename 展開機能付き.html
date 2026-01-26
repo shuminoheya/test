@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>保存先選択テスト</title>
+  <title>フォルダ選択テスト</title>
   <style>
     body {
       font-family: sans-serif;
@@ -21,37 +21,33 @@
   </style>
 </head>
 <body>
-  <h2>保存先選択テスト</h2>
-  <label>
-    <input type="checkbox" id="lowMemoryMode"> パフォーマンス低下モード
-  </label>
-  <br>
-  <button id="selectSave">保存先を選ぶ</button>
+  <h2>フォルダ選択テスト</h2>
+  <button id="selectFolder">保存先フォルダを選ぶ</button>
   <p id="status">待機中...</p>
 
   <script>
-    let writableStream = null;
+    let folderHandle = null;
 
-    document.getElementById('selectSave').addEventListener('click', async () => {
+    document.getElementById('selectFolder').addEventListener('click', async () => {
       const status = document.getElementById('status');
-      const checkbox = document.getElementById('lowMemoryMode');
 
-      if (!window.showSaveFilePicker) {
-        status.textContent = 'このブラウザは保存先の選択に対応していません。';
+      if (!window.showDirectoryPicker) {
+        status.textContent = 'このブラウザはフォルダ選択に対応していません。';
         return;
       }
 
       try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: 'output.shumi',
-          types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }]
-        });
-        writableStream = await handle.createWritable();
-        checkbox.checked = true;
-        status.textContent = '保存先が選択されました。';
+        folderHandle = await window.showDirectoryPicker();
+        status.textContent = 'フォルダが選択されました。';
+        
+        // テスト：その中にファイルを書き込んでみる
+        const fileHandle = await folderHandle.getFileHandle('test-output.txt', { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write('これはテスト出力です。');
+        await writable.close();
+        status.textContent += ' ファイル test-output.txt を保存しました。';
       } catch (err) {
-        checkbox.checked = false;
-        status.textContent = '保存先の選択がキャンセルされました。';
+        status.textContent = 'フォルダの選択がキャンセルされました。';
       }
     });
   </script>
