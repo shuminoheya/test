@@ -124,13 +124,12 @@
       const chunks = [];
 
       let fileName = mode === 'encrypt' ? file.name + '.shumi' : removeShumiExtension(file.name);
+      const tempName = fileName + '.crswap';
       let writableStream = null;
-      let finalHandle = null;
 
       if (lowMemory) {
-        const tempHandle = await folderHandle.getFileHandle(fileName + '.crswap', { create: true });
+        const tempHandle = await folderHandle.getFileHandle(tempName, { create: true });
         writableStream = await tempHandle.createWritable();
-        finalHandle = await folderHandle.getFileHandle(fileName, { create: true });
       }
 
       if (mode === 'encrypt') {
@@ -194,20 +193,32 @@
       if (writableStream) {
         await writableStream.close();
 
-        // .crswap を本ファイルにコピーしてから削除
-        const tempHandle = await folderHandle.getFileHandle(fileName + '.crswap');
-        const tempFile = await tempHandle.getFile();
-        const tempData = await tempFile.arrayBuffer();
+        try {
+          const tempHandle = await folderHandle.getFileHandle(tempName);
+          const tempFile = await tempHandle.getFile();
+          const tempData = await tempFile.arrayBuffer();
 
-        const finalWritable = await finalHandle.createWritable();
-        await finalWritable.write(tempData);
-        await finalWritable.close();
+          // 既存ファイルがあれば削除してから作成
+          try {
+            await folderHandle.removeEntry(fileName);
+          } catch (e) {
+            // 存在しない場合は無視
+          }
 
-        // .crswap ファイル削除
-        await folderHandle.removeEntry(fileName + '.crswap');
+          const finalHandle = await folderHandle.getFileHandle(fileName, { create: true });
+          const finalWritable = await finalHandle.createWritable();
+          await finalWritable.write(tempData);
+          await finalWritable.close();
 
-        status.textContent = '完了しました！（フォルダに保存）';
-        progressBar.value = 100;
+          // .crswap を削除
+          await folderHandle.removeEntry(tempName);
+
+          status.textContent = '完了しました！（フォルダに保存）';
+          progressBar.value = 100;
+        } catch (err) {
+          console.error('保存処理中にエラーが発生しました:', err);
+          status.textContent = '保存エラー';
+        }
       } else {
         const blob = new Blob(chunks);
         const a = document.createElement('a');
