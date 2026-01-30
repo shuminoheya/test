@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>lzh / 7z / gz → zip 変換（完全版）</title>
+
+<style>
+body { font-family: sans-serif; margin: 2rem; }
+h1 { font-size: 1.4rem; }
+.box { border: 1px solid #ccc; padding: 1rem; border-radius: 6px; }
+.log { white-space: pre-wrap; margin-top: 1rem; font-size: 0.9rem; }
+button { padding: 0.4rem 1rem; cursor: pointer; }
+</style>
+
+<!-- JSZip（zip作成） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- pako（gzip解凍） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
+<!-- 7z-wasm（7z解凍） -->
+<script src="https://unpkg.com/7z-wasm/dist/7zwasm.js"></script>
+
+<!-- lhasa-wasm（lzh解凍） -->
+<script src="https://unpkg.com/lhasa-wasm/dist/lhasa.js"></script>
+
+</head>
+<body>
+
+<h1>lzh / 7z / gz → zip 変換（完全版・ローカル対応）</h1>
+
+<div class="box">
+  <input id="fileInput" type="file" accept=".lzh,.7z,.gz" />
+  <button id="convertBtn">変換する</button>
+  <div id="log" class="log"></div>
+</div>
+
+<script>
+const logEl = document.getElementById("log");
+function log(t){ logEl.textContent += t + "\n"; }
+
+document.getElementById("convertBtn").onclick = async () => {
+  logEl.textContent = "";
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return log("ファイルを選択してください");
+
+  const name = file.name;
+  const ext = name.split(".").pop().toLowerCase();
+
+  log("処理開始: " + name);
+
+  if (ext === "gz") return handleGz(file);
+  if (ext === "7z") return handle7z(file);
+  if (ext === "lzh") return handleLzh(file);
+
+  log("対応拡張子: .lzh / .7z / .gz");
+};
+
+async function handleGz(file){
+  log("gz 解凍中…");
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const out = pako.ungzip(buf);
+
+  const innerName = file.name.replace(/\.gz$/i, "") || "content.bin";
+
+  const zip = new JSZip();
+  zip.file(innerName, out);
+
+  const blob = await zip.generateAsync({type:"blob"});
+  download(blob, innerName + ".zip");
+  log("gz → zip 完了");
+}
+
+async function handle7z(file){
+  log("7z 解凍中（WASM）…");
+
+  const data = new Uint8Array(await file.arrayBuffer());
+  const mod = await SevenZipWASM();
+
+  const list = mod.list(data);
+  log("内容: " + list.length + " ファイル");
+
+  const zip = new JSZip();
+
+  for (const entry of list){
+    const extracted = mod.extract(data, entry.name);
+    zip.file(entry.name, extracted);
+  }
+
+  const blob = await zip.generateAsync({type:"blob"});
+  download(blob, file.name + ".zip");
+  log("7z → zip 完了");
+}
+
+async function handleLzh(file){
+  log("lzh 解凍中（WASM）…");
+
+  const data = new Uint8Array(await file.arrayBuffer());
+  const mod = await LhasaWASM();
+
+  const archive = mod.open(data);
+  const zip = new JSZip();
+
+  for (let i = 0; i < archive.entries.length; i++){
+    const e = archive.entries[i];
+    const content = mod.extractEntry(archive, e);
+    zip.file(e.filename, content);
+  }
+
+  const blob = await zip.generateAsync({type:"blob"});
+  download(blob, file.name + ".zip");
+  log("lzh → zip 完了");
+}
+
+function download(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
