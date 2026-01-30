@@ -2,14 +2,17 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>lzh / 7z / gz → zip 変換（完全版）</title>
+<title>lzh / 7z / gz → zip 変換（進行状況付き）</title>
 
 <style>
-body { font-family: sans-serif; margin: 2rem; }
+body { font-family: system-ui, sans-serif; margin: 2rem; }
 h1 { font-size: 1.4rem; }
-.box { border: 1px solid #ccc; padding: 1rem; border-radius: 6px; }
-.log { white-space: pre-wrap; margin-top: 1rem; font-size: 0.9rem; }
+.box { border: 1px solid #ccc; padding: 1rem; border-radius: 6px; max-width: 640px; }
+.log { white-space: pre-wrap; margin-top: 1rem; font-size: 0.9rem; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; padding-top: .5rem; }
 button { padding: 0.4rem 1rem; cursor: pointer; }
+.progress-wrap { margin-top: .8rem; }
+progress { width: 100%; height: 1rem; }
+.status { font-size: 0.85rem; color: #555; margin-top: .3rem; }
 </style>
 
 <!-- JSZip（zip作成） -->
@@ -27,88 +30,156 @@ button { padding: 0.4rem 1rem; cursor: pointer; }
 </head>
 <body>
 
-<h1>lzh / 7z / gz → zip 変換（完全版・ローカル対応）</h1>
+<h1>lzh / 7z / gz → zip 変換（WASM・進行状況表示）</h1>
 
 <div class="box">
+  <p>https でホストして使うことを前提にした版です（WASM 読み込みの制約回避）。</p>
   <input id="fileInput" type="file" accept=".lzh,.7z,.gz" />
   <button id="convertBtn">変換する</button>
+
+  <div class="progress-wrap">
+    <progress id="progress" value="0" max="100"></progress>
+    <div id="status" class="status">待機中</div>
+  </div>
+
   <div id="log" class="log"></div>
 </div>
 
 <script>
 const logEl = document.getElementById("log");
-function log(t){ logEl.textContent += t + "\n"; }
+const progEl = document.getElementById("progress");
+const statusEl = document.getElementById("status");
+
+function log(t){
+  logEl.textContent += t + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setStatus(t){ statusEl.textContent = t; }
+function setProgress(v){ progEl.value = v; }
 
 document.getElementById("convertBtn").onclick = async () => {
   logEl.textContent = "";
+  setProgress(0);
+  setStatus("処理待機中…");
+
   const file = document.getElementById("fileInput").files[0];
-  if (!file) return log("ファイルを選択してください");
+  if (!file){
+    log("ファイルを選択してください");
+    setStatus("ファイル未選択");
+    return;
+  }
 
   const name = file.name;
   const ext = name.split(".").pop().toLowerCase();
 
   log("処理開始: " + name);
+  setStatus("拡張子判定中…");
 
-  if (ext === "gz") return handleGz(file);
-  if (ext === "7z") return handle7z(file);
-  if (ext === "lzh") return handleLzh(file);
-
-  log("対応拡張子: .lzh / .7z / .gz");
+  try {
+    if (ext === "gz")      await handleGz(file);
+    else if (ext === "7z") await handle7z(file);
+    else if (ext === "lzh")await handleLzh(file);
+    else {
+      log("対応拡張子: .lzh / .7z / .gz");
+      setStatus("未対応拡張子");
+    }
+  } catch(e){
+    console.error(e);
+    log("エラー: " + e);
+    setStatus("エラー発生");
+  }
 };
 
 async function handleGz(file){
-  log("gz 解凍中…");
+  setStatus("gz 解凍中…");
+  setProgress(5);
+
   const buf = new Uint8Array(await file.arrayBuffer());
   const out = pako.ungzip(buf);
 
+  setProgress(60);
   const innerName = file.name.replace(/\.gz$/i, "") || "content.bin";
 
   const zip = new JSZip();
   zip.file(innerName, out);
 
+  setStatus("zip 生成中…");
   const blob = await zip.generateAsync({type:"blob"});
+  setProgress(95);
+
   download(blob, innerName + ".zip");
+  setProgress(100);
+  setStatus("完了");
   log("gz → zip 完了");
 }
 
 async function handle7z(file){
-  log("7z 解凍中（WASM）…");
+  setStatus("7z 読み込み中（WASM 初期化）…");
+  setProgress(5);
 
   const data = new Uint8Array(await file.arrayBuffer());
-  const mod = await SevenZipWASM();
+  const mod = await SevenZipWASM(); // ライブラリ側のグローバル名想定
 
-  const list = mod.list(data);
-  log("内容: " + list.length + " ファイル");
+  setStatus("7z 内容一覧取得中…");
+  const list = mod.list(data); // { name, size, ... } の配列を想定
+  const total = list.length || 1;
+  log("7z 内のファイル数: " + total);
 
   const zip = new JSZip();
+  let idx = 0;
 
   for (const entry of list){
+    idx++;
+    const percent = Math.floor((idx / total) * 80) + 10; // 10〜90% を進行に割り当て
+    setProgress(percent);
+    setStatus(`7z 解凍中… (${idx}/${total}) ${entry.name}`);
+
+    // 個別エントリを解凍（API は仮の例）
     const extracted = mod.extract(data, entry.name);
     zip.file(entry.name, extracted);
   }
 
+  setStatus("zip 生成中…");
+  setProgress(95);
   const blob = await zip.generateAsync({type:"blob"});
+
   download(blob, file.name + ".zip");
+  setProgress(100);
+  setStatus("完了");
   log("7z → zip 完了");
 }
 
 async function handleLzh(file){
-  log("lzh 解凍中（WASM）…");
+  setStatus("lzh 読み込み中（WASM 初期化）…");
+  setProgress(5);
 
   const data = new Uint8Array(await file.arrayBuffer());
-  const mod = await LhasaWASM();
+  const mod = await LhasaWASM(); // ライブラリ側のグローバル名想定
 
+  setStatus("lzh 内容解析中…");
   const archive = mod.open(data);
+  const total = archive.entries.length || 1;
+  log("lzh 内のファイル数: " + total);
+
   const zip = new JSZip();
 
   for (let i = 0; i < archive.entries.length; i++){
     const e = archive.entries[i];
+    const percent = Math.floor((i + 1) / total * 80) + 10;
+    setProgress(percent);
+    setStatus(`lzh 解凍中… (${i+1}/${total}) ${e.filename}`);
+
     const content = mod.extractEntry(archive, e);
     zip.file(e.filename, content);
   }
 
+  setStatus("zip 生成中…");
+  setProgress(95);
   const blob = await zip.generateAsync({type:"blob"});
+
   download(blob, file.name + ".zip");
+  setProgress(100);
+  setStatus("完了");
   log("lzh → zip 完了");
 }
 
