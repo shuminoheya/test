@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>完全版 文字化け復元ツール</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  textarea { width: 100%; height: 120px; }
+  select { width: 100%; padding: 6px; }
+  .result { margin-top: 15px; padding: 10px; border: 1px solid #ccc; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<h2>完全版 文字化け復元ツール（逆変換）</h2>
+
+<p>文字化けした文字列:</p>
+<textarea id="inputText">ããã«ã¡ã¯</textarea>
+
+<p>この文字列を「どのエンコードで読んだ」と仮定するか:</p>
+<select id="encoding">
+  <option>ASCII</option>
+  <option>ISO-8859-1</option>
+  <option>ISO-8859-2</option>
+  <option>ISO-8859-3</option>
+  <option>ISO-8859-4</option>
+  <option>ISO-8859-5</option>
+  <option>ISO-8859-6</option>
+  <option>ISO-8859-7</option>
+  <option>ISO-8859-8</option>
+  <option>ISO-8859-9</option>
+  <option>ISO-8859-10</option>
+  <option>ISO-8859-11</option>
+  <option>ISO-8859-13</option>
+  <option>ISO-8859-14</option>
+  <option>ISO-8859-15</option>
+  <option>ISO-8859-16</option>
+  <option>UTF-8</option>
+  <option>UTF-16</option>
+  <option>UTF-16BE</option>
+  <option>UTF-16LE</option>
+  <option>UTF-32</option>
+  <option>UTF-32BE</option>
+  <option>UTF-32LE</option>
+  <option>UTF-7</option>
+  <option>UTF-1</option>
+  <option>UTF-EBCDIC</option>
+  <option>CESU-8</option>
+  <option>SCSU</option>
+  <option>BOCU-1</option>
+  <option>Punycode</option>
+  <option>GB2312</option>
+  <option>GBK</option>
+  <option>GB18030</option>
+  <option>Big5</option>
+  <option>Big5-HKSCS</option>
+  <option>EUC-JP</option>
+  <option>EUC-KR</option>
+  <option>EUC-CN</option>
+  <option>EUC-TW</option>
+  <option>Shift_JIS</option>
+  <option>CP932</option>
+  <option>ISO-2022-JP</option>
+  <option>ISO-2022-JP-1</option>
+  <option>ISO-2022-JP-2</option>
+  <option>ISO-2022-JP-3</option>
+  <option>ISO-2022-JP-2004</option>
+  <option>ISO-2022-KR</option>
+  <option>ISO-2022-CN</option>
+  <option>Johab</option>
+  <option>UHC</option>
+  <option>KOI8-R</option>
+  <option>KOI8-U</option>
+  <option>KOI8-T</option>
+  <option>Windows-1250</option>
+  <option>Windows-1251</option>
+  <option>Windows-1252</option>
+  <option>Windows-1253</option>
+  <option>Windows-1254</option>
+  <option>Windows-1255</option>
+  <option>Windows-1256</option>
+  <option>Windows-1257</option>
+  <option>Windows-1258</option>
+  <option>CP437</option>
+  <option>CP850</option>
+  <option>CP852</option>
+  <option>CP866</option>
+  <option>MacRoman</option>
+  <option>MacJapanese</option>
+  <option>MacCentralEurope</option>
+  <option>MacIcelandic</option>
+  <option>MacTurkish</option>
+  <option>EBCDIC (IBM037)</option>
+  <option>EBCDIC (IBM500)</option>
+  <option>EBCDIC (IBM1047)</option>
+  <option>Baudot Code</option>
+  <option>Morse Code</option>
+  <option>VISCII</option>
+  <option>TCVN3</option>
+  <option>TSCII</option>
+  <option>ISCII</option>
+  <option>ANSEL</option>
+</select>
+
+<button id="convertBtn">復元</button>
+
+<h3>復元結果（UTF-8）:</h3>
+<div id="result" class="result"></div>
+
+<!-- ▼ 外部ライブラリ群 ▼ -->
+<script src="https://cdn.jsdelivr.net/npm/encoding-japanese/encoding.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/iconv-lite-umd/dist/iconv-lite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/punycode/punycode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ebcdic-converter/dist/ebcdic.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/morse-code-converter/dist/morse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/baudot-codec/dist/baudot.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/unicode-converters/dist/unicode-converters.min.js"></script>
+
+<script>
+/* ---------------------------------------------------------
+   逆変換：文字化け → UTF-8 復元
+--------------------------------------------------------- */
+function restoreEncoding(mojibake, enc) {
+
+  // 日本語系（encoding-japanese）
+  const jpList = [
+    "Shift_JIS","CP932","EUC-JP","ISO-2022-JP","ISO-2022-JP-1",
+    "ISO-2022-JP-2","ISO-2022-JP-3","ISO-2022-JP-2004"
+  ];
+  if (jpList.includes(enc)) {
+    const bytes = Encoding.stringToCode(mojibake);
+    const utf8 = Encoding.convert(bytes, "UNICODE", enc);
+    return Encoding.codeToString(utf8);
+  }
+
+  // iconv-lite 系
+  if (iconv.encodingExists(enc)) {
+    const buf = Buffer.from(mojibake, "binary");
+    try {
+      return iconv.decode(buf, enc);
+    } catch {
+      return "(復元失敗)";
+    }
+  }
+
+  // Punycode
+  if (enc === "Punycode") {
+    try { return punycode.decode(mojibake); }
+    catch { return "(復元失敗)"; }
+  }
+
+  // EBCDIC
+  if (enc.includes("EBCDIC")) {
+    try {
+      const arr = mojibake.split(" ").map(x => parseInt(x));
+      return EBCDIC.fromEBCDIC(arr);
+    } catch {
+      return "(復元失敗)";
+    }
+  }
+
+  // Morse
+  if (enc === "Morse Code") {
+    try { return MORSE.decode(mojibake); }
+    catch { return "(復元失敗)"; }
+  }
+
+  // Baudot
+  if (enc === "Baudot Code") {
+    try {
+      const arr = mojibake.split(" ").map(x => parseInt(x));
+      return BAUDOT.decode(arr);
+    } catch {
+      return "(復元失敗)";
+    }
+  }
+
+  // Unicode 特殊系
+  if (enc === "UTF-7") return UnicodeConverters.fromUTF7(mojibake);
+  if (enc === "CESU-8") return UnicodeConverters.fromCESU8(mojibake);
+  if (enc === "SCSU") return UnicodeConverters.fromSCSU(mojibake);
+  if (enc === "BOCU-1") return UnicodeConverters.fromBOCU1(mojibake);
+
+  return "(未対応のエンコードです)";
+}
+
+/* ---------------------------------------------------------
+   ボタン動作
+--------------------------------------------------------- */
+document.getElementById("convertBtn").addEventListener("click", () => {
+  const text = document.getElementById("inputText").value;
+  const enc  = document.getElementById("encoding").value;
+
+  const result = restoreEncoding(text, enc);
+  document.getElementById("result").textContent = result;
+});
+</script>
+
+</body>
+</html>
