@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>HTML Blob 実行テスト</title>
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    textarea { width: 100%; height: 300px; font-family: monospace; }
+    button { margin-top: 8px; padding: 6px 12px; }
+  </style>
+</head>
+<body>
+  <h1>HTML Blob 実行テスト</h1>
+  <p>下のテキストエリアにHTMLを書いて「実行」を押すと、新しいタブで表示されます。</p>
+
+  <textarea id="htmlInput">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>サンプル</title>
+</head>
+<body>
+  <h1>こんにちは Blob!</h1>
+  <p>ここに好きなHTMLを書いてください。</p>
+</body>
+</html>
+  </textarea>
+  <br>
+  <button id="runBtn">実行</button>
+
+  <script>
+    document.getElementById('runBtn').addEventListener('click', function () {
+      const html = document.getElementById('htmlInput').value;
+
+      // Blobを作成
+      const blob = new Blob([html], { type: 'text/html' });
+
+      // Blob URLを生成
+      const url = URL.createObjectURL(blob);
+
+      // 新しいタブで開く
+      window.open(url, '_blank');
+
+      // 必要なら少し待ってからURLを解放（すぐ解放すると環境によっては問題になることもあるので任意）
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 10000);
+    });
+  </script>
+</body>
+</html>
