@@ -1,197 +1,187 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<title>lzh / 7z / gz → zip 変換（進行状況付き）</title>
-
-<style>
-body { font-family: system-ui, sans-serif; margin: 2rem; }
-h1 { font-size: 1.4rem; }
-.box { border: 1px solid #ccc; padding: 1rem; border-radius: 6px; max-width: 640px; }
-.log { white-space: pre-wrap; margin-top: 1rem; font-size: 0.9rem; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; padding-top: .5rem; }
-button { padding: 0.4rem 1rem; cursor: pointer; }
-.progress-wrap { margin-top: .8rem; }
-progress { width: 100%; height: 1rem; }
-.status { font-size: 0.85rem; color: #555; margin-top: .3rem; }
-</style>
-
-<!-- JSZip（zip作成） -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-<!-- pako（gzip解凍） -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-
-<!-- 7z-wasm（7z解凍） -->
-<script src="https://unpkg.com/7z-wasm/dist/7zwasm.js"></script>
-
-<!-- lhasa-wasm（lzh解凍） -->
-<script src="https://unpkg.com/lhasa-wasm/dist/lhasa.js"></script>
-
+  <meta charset="UTF-8">
+  <title>ファイル暗号化・復号化</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f0f4f8, #e0ecf4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: white;
+      padding: 30px 40px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      width: 400px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.5em;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    label {
+      margin: 0 10px;
+      font-weight: bold;
+      color: #444;
+    }
+    input[type="file"],
+    input[type="password"] {
+      margin: 10px 0;
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1em;
+      margin-top: 10px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    progress {
+      width: 100%;
+      height: 20px;
+      margin-top: 20px;
+      appearance: none;
+    }
+    progress::-webkit-progress-bar {
+      background-color: #eee;
+      border-radius: 10px;
+    }
+    progress::-webkit-progress-value {
+      background-color: #4CAF50;
+      border-radius: 10px;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 0.95em;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-
-<h1>lzh / 7z / gz → zip 変換（WASM・進行状況表示）</h1>
-
-<div class="box">
-  <p>https でホストして使うことを前提にした版です（WASM 読み込みの制約回避）。</p>
-  <input id="fileInput" type="file" accept=".lzh,.7z,.gz" />
-  <button id="convertBtn">変換する</button>
-
-  <div class="progress-wrap">
-    <progress id="progress" value="0" max="100"></progress>
-    <div id="status" class="status">待機中</div>
+  <div class="container">
+    <h1>ファイル暗号化・復号化</h1>
+    <p>このページはファイルを趣味の部屋独自のフォーマットで暗号化してそのファイルを復号化できるサイトです。</p>
+    <label><input type="radio" name="mode" value="encrypt" checked> 暗号化</label>
+    <label><input type="radio" name="mode" value="decrypt"> 復号化</label><br><br>
+    <input type="file" id="fileInput"><br>
+    <input type="password" id="password" placeholder="パスワードを入力"><br>
+    <label><input type="checkbox" id="lowMemory"> パフォーマンス低下モード（低メモリ）</label><br><br>
+    <button id="run">実行</button>
+    <progress id="bar" value="0" max="100"></progress>
+    <p id="status">待機中</p>
   </div>
-
-  <div id="log" class="log"></div>
-</div>
-
-<script>
-const logEl = document.getElementById("log");
-const progEl = document.getElementById("progress");
-const statusEl = document.getElementById("status");
-
-function log(t){
-  logEl.textContent += t + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
-}
-function setStatus(t){ statusEl.textContent = t; }
-function setProgress(v){ progEl.value = v; }
-
-document.getElementById("convertBtn").onclick = async () => {
-  logEl.textContent = "";
-  setProgress(0);
-  setStatus("処理待機中…");
-
-  const file = document.getElementById("fileInput").files[0];
-  if (!file){
-    log("ファイルを選択してください");
-    setStatus("ファイル未選択");
-    return;
-  }
-
-  const name = file.name;
-  const ext = name.split(".").pop().toLowerCase();
-
-  log("処理開始: " + name);
-  setStatus("拡張子判定中…");
-
-  try {
-    if (ext === "gz")      await handleGz(file);
-    else if (ext === "7z") await handle7z(file);
-    else if (ext === "lzh")await handleLzh(file);
-    else {
-      log("対応拡張子: .lzh / .7z / .gz");
-      setStatus("未対応拡張子");
+  <script>
+    const CHUNK = 15 * 1024 * 1024;
+    function removeExt(name) {
+      return name.endsWith('.shumi') ? name.slice(0, -6) : name;
     }
-  } catch(e){
-    console.error(e);
-    log("エラー: " + e);
-    setStatus("エラー発生");
-  }
-};
-
-async function handleGz(file){
-  setStatus("gz 解凍中…");
-  setProgress(5);
-
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const out = pako.ungzip(buf);
-
-  setProgress(60);
-  const innerName = file.name.replace(/\.gz$/i, "") || "content.bin";
-
-  const zip = new JSZip();
-  zip.file(innerName, out);
-
-  setStatus("zip 生成中…");
-  const blob = await zip.generateAsync({type:"blob"});
-  setProgress(95);
-
-  download(blob, innerName + ".zip");
-  setProgress(100);
-  setStatus("完了");
-  log("gz → zip 完了");
-}
-
-async function handle7z(file){
-  setStatus("7z 読み込み中（WASM 初期化）…");
-  setProgress(5);
-
-  const data = new Uint8Array(await file.arrayBuffer());
-  const mod = await SevenZipWASM(); // ライブラリ側のグローバル名想定
-
-  setStatus("7z 内容一覧取得中…");
-  const list = mod.list(data); // { name, size, ... } の配列を想定
-  const total = list.length || 1;
-  log("7z 内のファイル数: " + total);
-
-  const zip = new JSZip();
-  let idx = 0;
-
-  for (const entry of list){
-    idx++;
-    const percent = Math.floor((idx / total) * 80) + 10; // 10〜90% を進行に割り当て
-    setProgress(percent);
-    setStatus(`7z 解凍中… (${idx}/${total}) ${entry.name}`);
-
-    // 個別エントリを解凍（API は仮の例）
-    const extracted = mod.extract(data, entry.name);
-    zip.file(entry.name, extracted);
-  }
-
-  setStatus("zip 生成中…");
-  setProgress(95);
-  const blob = await zip.generateAsync({type:"blob"});
-
-  download(blob, file.name + ".zip");
-  setProgress(100);
-  setStatus("完了");
-  log("7z → zip 完了");
-}
-
-async function handleLzh(file){
-  setStatus("lzh 読み込み中（WASM 初期化）…");
-  setProgress(5);
-
-  const data = new Uint8Array(await file.arrayBuffer());
-  const mod = await LhasaWASM(); // ライブラリ側のグローバル名想定
-
-  setStatus("lzh 内容解析中…");
-  const archive = mod.open(data);
-  const total = archive.entries.length || 1;
-  log("lzh 内のファイル数: " + total);
-
-  const zip = new JSZip();
-
-  for (let i = 0; i < archive.entries.length; i++){
-    const e = archive.entries[i];
-    const percent = Math.floor((i + 1) / total * 80) + 10;
-    setProgress(percent);
-    setStatus(`lzh 解凍中… (${i+1}/${total}) ${e.filename}`);
-
-    const content = mod.extractEntry(archive, e);
-    zip.file(e.filename, content);
-  }
-
-  setStatus("zip 生成中…");
-  setProgress(95);
-  const blob = await zip.generateAsync({type:"blob"});
-
-  download(blob, file.name + ".zip");
-  setProgress(100);
-  setStatus("完了");
-  log("lzh → zip 完了");
-}
-
-function download(blob, name){
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-</script>
-
+    async function deriveKey(pw) {
+      const e = new TextEncoder();
+      const s = e.encode('shumi-salt');
+      const m = await crypto.subtle.importKey('raw', e.encode(pw), { name: 'PBKDF2' }, false, ['deriveKey']);
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: s, iterations: 100000, hash: 'SHA-256' }, m, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    }
+    document.getElementById('run').addEventListener('click', async () => {
+      const f = document.getElementById('fileInput').files[0];
+      const pw = document.getElementById('password').value;
+      const m = document.querySelector('input[name="mode"]:checked').value;
+      const low = document.getElementById('lowMemory').checked;
+      const s = document.getElementById('status');
+      const b = document.getElementById('bar');
+      if (!f || !pw) return alert('ファイルとパスワードを入力');
+      const k = await deriveKey(pw);
+      let ws = null;
+      let out = [];
+      if (low && window.showSaveFilePicker) {
+        try {
+          const name = m === 'encrypt' ? f.name + '.shumi' : removeExt(f.name);
+          const h = await window.showSaveFilePicker({ suggestedName: name });
+          ws = await h.createWritable();
+        } catch {
+          s.textContent = '保存キャンセル、メモリに切替';
+        }
+      }
+      b.value = 0;
+      b.max = f.size;
+      try {
+        if (m === 'encrypt') {
+          const total = Math.ceil(f.size / CHUNK);
+          let off = 0, i = 0;
+          while (off < f.size) {
+            const chunk = await f.slice(off, off + CHUNK).arrayBuffer();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, chunk);
+            const len = new Uint8Array(4);
+            new DataView(len.buffer).setUint32(0, enc.byteLength, true);
+            const comb = new Uint8Array(4 + 12 + enc.byteLength);
+            comb.set(len, 0);
+            comb.set(iv, 4);
+            comb.set(new Uint8Array(enc), 16);
+            if (ws) await ws.write(comb); else out.push(comb);
+            off += CHUNK;
+            i++;
+            b.value = off;
+            s.textContent = `暗号化中 ${i}/${total}`;
+            await new Promise(requestAnimationFrame);
+          }
+        } else {
+          const buf = await f.arrayBuffer();
+          const dv = new DataView(buf);
+          let off = 0, total = 0;
+          while (off + 16 <= buf.byteLength) {
+            const len = dv.getUint32(off, true);
+            off += 16 + len;
+            total++;
+          }
+          off = 0;
+          let i = 0;
+          while (off + 16 <= buf.byteLength) {
+            const len = dv.getUint32(off, true);
+            const iv = new Uint8Array(buf.slice(off + 4, off + 16));
+            const dat = buf.slice(off + 16, off + 16 + len);
+            const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, k, dat);
+            if (ws) await ws.write(new Uint8Array(dec)); else out.push(new Uint8Array(dec));
+            off += 16 + len;
+            i++;
+            b.value = off;
+            s.textContent = `復号中 ${i}/${total}`;
+            await new Promise(requestAnimationFrame);
+          }
+        }
+        if (ws) {
+          await ws.close();
+          s.textContent = '完了（保存）';
+        } else {
+          const blob = new Blob(out);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = m === 'encrypt' ? f.name + '.shumi' : removeExt(f.name);
+          a.click();
+          s.textContent = '完了（ダウンロード）';
+        }
+        b.value = b.max;
+      } catch (e) {
+        s.textContent = 'エラー: ' + e.message;
+      }
+    });
+  </script>
 </body>
 </html>
