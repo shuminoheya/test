@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>動画再生（Blob URL 無効化）</title>
+  <title>動画再生（分割ZIP＋Blob保護）</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     body {
@@ -24,6 +24,8 @@
 
   <script>
     const FIXED_PASSWORD = 'mySecretKey123';
+    const CHUNK_PREFIX = 'data/encrypted_video.zip.';
+    const MAX_CHUNKS = 100;
 
     if (window.top === window.self) {
       document.body.innerHTML = "<p style='color:white;text-align:center;margin-top:40vh;'>不正なアクセスです。リダイレクトします...</p>";
@@ -48,10 +50,52 @@
       }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
     }
 
+    async function detectChunkFiles() {
+      const urls = [];
+      for (let i = 1; i <= MAX_CHUNKS; i++) {
+        const part = i.toString().padStart(3, '0');
+        const url = `${CHUNK_PREFIX}${part}`;
+        try {
+          const res = await fetch(url, { method: 'GET' });
+          if (res.ok) {
+            urls.push(url);
+          } else {
+            break;
+          }
+        } catch (e) {
+          break;
+        }
+      }
+      if (urls.length === 0) {
+        throw new Error("分割ファイルが見つかりませんでした");
+      }
+      return urls;
+    }
+
+    async function fetchChunks(urls) {
+      const buffers = [];
+      for (const url of urls) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`取得に失敗: ${url}`);
+        const buf = await res.arrayBuffer();
+        buffers.push(buf);
+      }
+
+      const totalLength = buffers.reduce((sum, b) => sum + b.byteLength, 0);
+      const combined = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const buf of buffers) {
+        combined.set(new Uint8Array(buf), offset);
+        offset += buf.byteLength;
+      }
+
+      return new Blob([combined], { type: 'application/zip' });
+    }
+
     async function decryptAndPlay() {
       try {
-        const zipResponse = await fetch('data/encrypted_video.zip');
-        const zipBlob = await zipResponse.blob();
+        const chunkUrls = await detectChunkFiles();
+        const zipBlob = await fetchChunks(chunkUrls);
         const zip = await JSZip.loadAsync(zipBlob);
 
         const [encData, ivData, saltData] = await Promise.all([
@@ -75,7 +119,7 @@
         const video = document.getElementById('video');
         video.src = blobURL;
 
-        // 読み込み完了後にURLを無効化
+        // 読み込み完了後にURLを無効化（他タブでの再生防止）
         video.onloadeddata = () => {
           URL.revokeObjectURL(blobURL);
         };
@@ -88,4 +132,3 @@
   </script>
 </body>
 </html>
-
