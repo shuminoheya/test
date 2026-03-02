@@ -1,150 +1,132 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>動画再生（分割ZIP＋完全バッファ確認）</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<style>
-body {
-margin: 0;
-background: #000;
-}
-video {
-width: 100%;
-height: 100vh;
-object-fit: contain;
-background: #000;
-}
-</style>
+  <meta charset="UTF-8">
+  <title>動画再生（分割ZIP対応・事前検出）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+    }
+    video {
+      width: 100%;
+      height: 100vh;
+      object-fit: contain;
+      background: #000;
+    }
+  </style>
 </head>
 <body>
-<video id="video" controls autoplay muted playsinline controlsList="nodownload" oncontextmenu="return false">
-この動画は再生できません。
-</video>
+  <video id="video" controls autoplay muted playsinline controlsList="nodownload" oncontextmenu="return false">
+    この動画は再生できません。
+  </video>
 
-<script>
-const FIXEDPASSWORD = 'mySecretKey123';
-const CHUNKPREFIX = 'data/encryptedvideo.zip.';
-const MAXCHUNKS = 100;
+  <script>
+    const FIXED_PASSWORD = 'mySecretKey123';
+    const CHUNK_PREFIX = 'data/encrypted_video.zip.';
+    const MAX_CHUNKS = 100; // 安全のための上限
 
-// iframe チェック（必要なら残す）
-if (window.top === window.self) {
-document.body.innerHTML = "<p style='color:white;text-align:center;margin-top:40vh;'>不正なアクセスです。リダイレクトします...</p>";
-setTimeout(() => {
-location.href = "https://www.google.com";
-}, 2000);
-} else {
-decryptAndPlay();
-}
+    if (window.top === window.self) {
+      document.body.innerHTML = "<p style='color:white;text-align:center;margin-top:40vh;'>不正なアクセスです。リダイレクトします...</p>";
+      setTimeout(() => {
+        location.href = "https://www.google.com";
+      }, 2000);
+    } else {
+      decryptAndPlay();
+    }
 
-async function getKeyMaterial(password) {
-const enc = new TextEncoder();
-return crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"]);
-}
+    async function getKeyMaterial(password) {
+      const enc = new TextEncoder();
+      return crypto.subtle.importKey(
+        "raw",
+        enc.encode(password),
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+      );
+    }
 
-async function deriveKey(keyMaterial, salt) {
-return crypto.subtle.deriveKey({
-name: "PBKDF2",
-salt: salt,
-iterations: 100000,
-hash: "SHA-256"
-}, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-}
+    async function deriveKey(keyMaterial, salt) {
+      return crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt: salt,
+          iterations: 100000,
+          hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        true,
+        ["encrypt", "decrypt"]
+      );
+    }
 
-async function detectChunkFiles() {
-const urls = [];
-for (let i = 1; i <= MAXCHUNKS; i++) {
-const part = i.toString().padStart(3, '0');
-const url = ${CHUNKPREFIX}${part};
-try {
-const res = await fetch(url, { method: 'GET' });
-if (res.ok) {
-urls.push(url);
-} else {
-break;
-}
-} catch (e) {
-break;
-}
-}
-if (urls.length === 0) {
-throw new Error("分割ファイルが見つかりませんでした");
-}
-return urls;
-}
+    async function detectChunkFiles() {
+      const urls = [];
+      for (let i = 1; i <= MAX_CHUNKS; i++) {
+        const part = i.toString().padStart(3, '0');
+        const url = `${CHUNK_PREFIX}${part}`;
+        try {
+          const res = await fetch(url, { method: 'HEAD' });
+          if (res.ok) {
+            urls.push(url);
+          } else {
+            break;
+          }
+        } catch (e) {
+          break;
+        }
+      }
+      if (urls.length === 0) {
+        throw new Error("分割ファイルが見つかりませんでした");
+      }
+      return urls;
+    }
 
-async function fetchChunks(urls) {
-const buffers = [];
-for (const url of urls) {
-const res = await fetch(url);
-if (!res.ok) throw new Error(取得に失敗: ${url});
-const buf = await res.arrayBuffer();
-buffers.push(buf);
-}
+    async function fetchChunks(urls) {
+      const chunks = [];
+      for (const url of urls) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`取得に失敗: ${url}`);
+        const buf = await res.arrayBuffer();
+        chunks.push(new Uint8Array(buf));
+      }
+      return new Blob(chunks, { type: 'application/zip' });
+    }
 
-const totalLength = buffers.reduce((sum, b) => sum + b.byteLength, 0);
-const combined = new Uint8Array(totalLength);
-let offset = 0;
-for (const buf of buffers) {
-combined.set(new Uint8Array(buf), offset);
-offset += buf.byteLength;
-}
+    async function decryptAndPlay() {
+      try {
+        const chunkUrls = await detectChunkFiles();
+        const zipBlob = await fetchChunks(chunkUrls);
+        const zip = await JSZip.loadAsync(zipBlob);
 
-return new Blob([combined], { type: 'application/zip' });
-}
+        const [encData, ivData, saltData] = await Promise.all([
+          zip.file("video.enc").async("uint8array"),
+          zip.file("iv.bin").async("uint8array"),
+          zip.file("salt.bin").async("uint8array")
+        ]);
 
-async function decryptAndPlay() {
-try {
-const chunkUrls = await detectChunkFiles();
-const zipBlob = await fetchChunks(chunkUrls);
-const zip = await JSZip.loadAsync(zipBlob);
+        const keyMaterial = await getKeyMaterial(FIXED_PASSWORD);
+        const key = await deriveKey(keyMaterial, saltData);
 
-const [encData, ivData, saltData] = await Promise.all([
-zip.file("video.enc").async("uint8array"),
-zip.file("iv.bin").async("uint8array"),
-zip.file("salt.bin").async("uint8array")
-]);
+        const decrypted = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: ivData },
+          key,
+          encData
+        );
 
-const keyMaterial = await getKeyMaterial(FIXED_PASSWORD);
-const key = await deriveKey(keyMaterial, saltData);
+        const blob = new Blob([decrypted], { type: "video/mp4" });
+        const blobURL = URL.createObjectURL(blob);
 
-const decrypted = await crypto.subtle.decrypt(
-{ name: "AES-GCM", iv: ivData },
-key,
-encData
-);
+        const video = document.getElementById('video');
+        video.src = blobURL;
 
-const blob = new Blob([decrypted], { type: "video/mp4" });
-const blobURL = URL.createObjectURL(blob);
-
-const video = document.getElementById('video');
-video.src = blobURL;
-
-// ▼▼▼ ここが重要：完全バッファ読み込み後に revoke ▼▼▼
-video.addEventListener("loadedmetadata", () => {
-const duration = video.duration;
-
-const checkBuffered = () => {
-if (video.buffered.length > 0) {
-const end = video.buffered.end(video.buffered.length - 1);
-
-if (end >= duration) {
-URL.revokeObjectURL(blobURL);
-console.log("Blob URL revoked after full buffering");
-return;
-}
-}
-setTimeout(checkBuffered, 200);
-};
-
-checkBuffered();
-});
-
-} catch (e) {
-alert("動画の復号に失敗しました。ファイルや鍵を確認してください。");
-console.error(e);
-}
-}
-</script>
+      } catch (e) {
+        alert("動画の復号に失敗しました。ファイルや鍵を確認してください。");
+        console.error(e);
+      }
+    }
+  </script>
 </body>
 </html>
