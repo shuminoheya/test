@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>動画再生（分割ZIP＋Blob保護）</title>
+  <title>動画再生（分割ZIP＋JSのみsrc設定）</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     body {
@@ -119,10 +119,8 @@
         const video = document.getElementById('video');
         video.src = blobURL;
 
-        // 読み込み完了後にURLを無効化（他タブでの再生防止）
-        video.onloadeddata = () => {
-          URL.revokeObjectURL(blobURL);
-        };
+        // Blob URLはHTMLに出ないので、他タブでの再生が困難になる
+        // revokeObjectURLは使わず、再生中は保持
 
       } catch (e) {
         alert("動画の復号に失敗しました。ファイルや鍵を確認してください。");
@@ -132,3 +130,4 @@
   </script>
 </body>
 </html>
+
