@@ -1,0 +1,151 @@
+ <!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ローマ字タイピング</title>
+  <style>
+    body { font-family: sans-serif; padding: 40px; line-height: 1.8; }
+    #stats { font-size: 1.2em; margin-bottom: 20px; }
+    #japanese, #romaji {
+      font-size: 1.1em;
+      white-space: pre-wrap;
+      margin-bottom: 10px;
+    }
+    #romaji {
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    .typed { color: gray; }
+    .current { background: yellow; }
+  </style>
+</head>
+
+<body>
+
+  <iframe width="560" height="315" src="https://www.youtube.com/embed/NpgaGhAW9So" 
+    title="YouTube video player" frameborder="0" allowfullscreen></iframe>
+
+  <div id="stats">
+    打鍵数: <span id="keystrokes">0</span>｜スピード: <span id="speed">0.00</span> 打/秒
+  </div>
+  <div id="japanese"></div>
+  <div id="romaji"></div>
+
+  <script>
+
+const sentences = [
+  { jp: "色は匂へど いつか散りぬるを", hira: "いろはにおえど いつかちりぬるを" },
+  { jp: "さ迷う事さえ 許せなかった", hira: "さまようことさえ ゆるせなかった" },
+  { jp: "咲き誇る花はいつか", hira: "さきほこるはなはいつか" },
+  { jp: "教えてくれた 生きるだけでは罪と", hira: "おしえてくれた いきるだけではつみと" },
+  { jp: "離れられない 離せはしないと", hira: "はなれられない はなせはしないと" },
+  { jp: "抱く思いは 心を躍らせるばかり", hira: "いだくおもいは こころをおどらせるばかり" },
+  { jp: "色は匂へど いつか散りぬるを", hira: "いろはにおえど いつかちりぬるを" },
+  { jp: "さ迷う暇はない けれど後退り", hira: "さまようひまはない けれどあとずさり" },
+  { jp: "甘えるか弱さと 甘えられぬ弱さで", hira: "あまえるかよわさと あまえられぬよわさで" },
+  { jp: "悪夢が優しく私を弄ぶ", hira: "あくむがやさしくわたしをもてあそぶ" },
+  { jp: "弱さ知るアナタは今", hira: "よわさしるあなたはいま" },
+  { jp: "許してくれた 求める者の欲を", hira: "ゆるしてくれた もとめるもののよくを" },
+  { jp: "健気に咲いた 刹那の美しさ", hira: "けなげにさいた せつなのうつくしさ" },
+  { jp: "それを知るには 遅すぎたのかもしれない", hira: "それをしるには おそすぎたのかもしれない" },
+  { jp: "色は匂へど いつか散りぬるを", hira: "いろはにおえど いつかちりぬるを" },
+  { jp: "アナタのすべてに 幼く委ねたい", hira: "あなたのすべてに おさなくゆだねたい" },
+  { jp: "許せぬ優しさと 揺るぐ独占欲は", hira: "ゆるせぬやさしさと ゆるぐどくせんよくは" },
+  { jp: "秤にかけれぬ 我儘な愛", hira: "はかりにかけれぬ わがままなあい" },
+  { jp: "色は匂へど すべて散りぬるを", hira: "いろはにおえど すべてちりぬるを" },
+  { jp: "短き記憶に 溢れる想い", hira: "みじかききおくに あふれるおもい" },
+  { jp: "枯れゆく命よ 儚く強くあれ", hira: "かれゆくいのちよ はかなくつよくあれ" },
+  { jp: "無慈悲で優しい 時のように", hira: "むじひでやさしい ときのように" }
+];
+
+
+ 
+ const romajiMap = {
+      "あ": "a",  "い": "i",  "う": "u",  "え": "e",  "お": "o",
+      "か": "ka", "き": "ki", "く": "ku", "け": "ke", "こ": "ko",
+      "さ": "sa", "し": "shi","す": "su", "せ": "se", "そ": "so",
+      "た": "ta", "ち": "ti","つ": "tu","て": "te", "と": "to",
+      "な": "na", "に": "ni", "ぬ": "nu", "ね": "ne", "の": "no",
+      "は": "ha", "ひ": "hi", "ふ": "fu", "へ": "he", "ほ": "ho",
+      "ま": "ma", "み": "mi", "む": "mu", "め": "me", "も": "mo",
+      "や": "ya", "ゆ": "yu", "よ": "yo",
+      "ら": "ra", "り": "ri", "る": "ru", "れ": "re", "ろ": "ro",
+      "わ": "wa", "を": "wo", "ん": "nn",
+      "が": "ga", "ぎ": "gi", "ぐ": "gu", "げ": "ge", "ご": "go",
+      "ざ": "za", "じ": "ji", "ず": "zu", "ぜ": "ze", "ぞ": "zo",
+      "だ": "da", "ぢ": "ji", "づ": "zu", "で": "de", "ど": "do",
+      "ば": "ba", "び": "bi", "ぶ": "bu", "べ": "be", "ぼ": "bo",
+      "ぱ": "pa", "ぴ": "pi", "ぷ": "pu", "ぺ": "pe", "ぽ": "po",
+      "ゃ": "xya", "ゅ": "xyu", "ょ": "xyo",
+      "っ": "xtu",
+      "ー": "-",
+      "、": ",", "。": ".", "？": "?"
+    };
+
+    function convertToRomaji(text) {
+      let result = "";
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        result += romajiMap[c] || c;
+      }
+      return result;
+    }
+
+    const japaneseDiv = document.getElementById("japanese");
+    const romajiDiv = document.getElementById("romaji");
+    const keystrokesDisplay = document.getElementById("keystrokes");
+    const speedDisplay = document.getElementById("speed");
+
+    let currentSentence = 0;
+    let currentIndex = 0;
+    let keystrokes = 0;
+    let startTime = null;
+    let romajiText = "";
+
+    function loadSentence(index) {
+      const s = sentences[index];
+      japaneseDiv.textContent = s.jp;
+      romajiText = convertToRomaji(s.hira);
+      currentIndex = 0;
+      romajiDiv.innerHTML = `<span class="current">${romajiText[0]}</span>${romajiText.slice(1)}`;
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (!startTime) startTime = Date.now();
+      const key = e.key;
+      if (key.length === 1 || key === "Enter") {
+        keystrokes++;
+        keystrokesDisplay.textContent = keystrokes;
+
+        const expected = romajiText[currentIndex];
+        const input = key === "Enter" ? "\n" : key;
+
+        if (input === expected) {
+          currentIndex++;
+          const elapsed = (Date.now() - startTime) / 1000;
+          speedDisplay.textContent = (keystrokes / elapsed).toFixed(2);
+
+          const typed = `<span class="typed">${romajiText.slice(0, currentIndex)}</span>`;
+          const current = `<span class="current">${romajiText[currentIndex] || ""}</span>`;
+          const rest = romajiText.slice(currentIndex + 1);
+          romajiDiv.innerHTML = typed + current + rest;
+
+          if (currentIndex >= romajiText.length) {
+            currentSentence++;
+            if (currentSentence < sentences.length) {
+              setTimeout(() => loadSentence(currentSentence), 300);
+            } else {
+              alert("終わりだ。");
+              romajiDiv.innerHTML = "";
+              japaneseDiv.textContent = "";
+            }
+          }
+        }
+      }
+    });
+
+    loadSentence(currentSentence);
+  </script>
+</body>
+</html>
