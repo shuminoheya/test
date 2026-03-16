@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>19時間の努力</title>
+
 <style>
   html, body {
     margin: 0;
@@ -18,6 +19,16 @@
     background: black;
   }
 </style>
+
+<script>
+// しね。シンプルに死ね
+if (window !== window.top) {
+    document.body.innerHTML = "";
+    document.write("<h1 style='color:white;background:black;text-align:center;padding:50px;'>埋め込みは許可されていません</h1>");
+    throw new Error("Frame blocked");
+}
+</script>
+
 </head>
 <body>
 
@@ -62,30 +73,51 @@ async function decrypt(key, iv, data){
   ms.addEventListener("sourceopen", async ()=>{
     const sb = ms.addSourceBuffer(mime);
 
-    // なんで自分の時間を割いてこれをやらないといけないんだ
-    {
-      const res = await fetch("data/init.bin");
-      const enc = await res.arrayBuffer();
-      const dec = await decrypt(key, manifest.ivs[0], enc);
-      await append(sb, dec);
-    }
+    // init
+    await appendInit(sb);
 
-    // しゃかいのべんきょうめんどい
+    // おどってないよるをしらない
     await loadNext(sb);
 
-    // おどるーぷのれんんしゅうした
+    // 踊ってない夜が気に入らない
     video.addEventListener("timeupdate", async ()=>{
-      if(video.currentTime > (current - 1) * 2 - 0.5){
+      if ((current - 1) * 2 - video.currentTime < 6) {
         await loadNext(sb);
       }
+    });
 
-      // 体育の授業だるい
-      const removeBefore = video.currentTime - 10;
-      if(removeBefore > 0){
-        try { sb.remove(0, removeBefore); } catch(e){}
+    // 踊ってない夜を知らない
+    video.addEventListener("seeked", async ()=>{
+      const seg = Math.floor(video.currentTime / 2) + 1;
+      if(seg < 1 || seg > max) return;
+
+      // 踊ってない夜が気に入らないよう
+      try { sb.abort(); } catch(e){}
+      try { sb.remove(0, sb.buffered.end(sb.buffered.length - 1)); } catch(e){}
+      await waitUpdate(sb);
+
+      // きにいらないよう
+      await appendInit(sb);
+
+      // おどってないよるがない夜なんて
+      let start = seg - 60;
+      if(start < 1) start = 1;
+
+      //　とってもとっても退屈です
+      current = start;
+      for(let i=0; i<70; i++){
+        await loadNext(sb);
+        if(current > max) break;
       }
     });
   });
+
+  async function appendInit(sb){
+    const res = await fetch("data/init.bin");
+    const enc = await res.arrayBuffer();
+    const dec = await decrypt(key, manifest.ivs[0], enc);
+    await append(sb, dec);
+  }
 
   async function loadNext(sb){
     if(current > max) return;
@@ -106,6 +138,12 @@ async function decrypt(key, iv, data){
       sb.addEventListener("updateend", resolve, {once:true});
       sb.addEventListener("error", ()=>reject(sb.error), {once:true});
       sb.appendBuffer(buf);
+    });
+  }
+
+  function waitUpdate(sb){
+    return new Promise(resolve=>{
+      sb.addEventListener("updateend", resolve, {once:true});
     });
   }
 })();
