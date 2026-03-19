@@ -21,7 +21,7 @@
 </style>
 
 <script>
-// しね。シンプルに死ね
+// iframe 埋め込み拒否
 if (window !== window.top) {
     document.body.innerHTML = "";
     document.write("<h1 style='color:white;background:black;text-align:center;padding:50px;'>埋め込みは許可されていません</h1>");
@@ -76,36 +76,36 @@ async function decrypt(key, iv, data){
     // init
     await appendInit(sb);
 
-    // おどってないよるをしらない
+    // 最初のセグメント
     await loadNext(sb);
 
-    // 踊ってない夜が気に入らない
+    // 再生中のバッファ補充（6秒バッファ）
     video.addEventListener("timeupdate", async ()=>{
       if ((current - 1) * 2 - video.currentTime < 6) {
         await loadNext(sb);
       }
     });
 
-    // 踊ってない夜を知らない
+    // ★ シーク完全対応（誤差5分）
     video.addEventListener("seeked", async ()=>{
       const seg = Math.floor(video.currentTime / 2) + 1;
       if(seg < 1 || seg > max) return;
 
-      // 踊ってない夜が気に入らないよう
+      // バッファ完全クリア
       try { sb.abort(); } catch(e){}
       try { sb.remove(0, sb.buffered.end(sb.buffered.length - 1)); } catch(e){}
       await waitUpdate(sb);
 
-      // きにいらないよう
+      // init 再読み込み
       await appendInit(sb);
 
-      // おどってないよるがない夜なんて
-      let start = seg - 60;
+      // ★ 誤差5分：前120セグメントから読み込む
+      let start = seg - 120;
       if(start < 1) start = 1;
 
-      //　とってもとっても退屈です
+      // ★ 前後含めて150セグメント読み込む
       current = start;
-      for(let i=0; i<70; i++){
+      for(let i=0; i<150; i++){
         await loadNext(sb);
         if(current > max) break;
       }
