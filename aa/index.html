@@ -70,10 +70,10 @@
     </div>
 
     <script type="module">
-        import {Archive} from './node_modules/libarchive.js/main.js';
+        import {Archive} from 'main.js';
 
         Archive.init({
-            workerUrl: '/libarchivejs/node_modules/libarchive.js/dist/worker-bundle.js'
+            workerUrl: 'worker-bundle.js'
         });
 
         document.getElementById('file').addEventListener('change', async (e) => {
