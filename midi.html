@@ -1,54 +1,27 @@
-    <meta charset="UTF-8">
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>MIDIファイル再生</title>
-    <!-- ライブラリの読み込み -->
-    <script src="https://jsdelivr.net"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .controls { margin-bottom: 20px; }
-        midi-player { display: block; width: 100%; margin: 10px 0; }
-        midi-visualizer { display: block; width: 100%; height: 200px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>MIDI Player</title>
+
+  <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.22.1/dist/magentamusic.min.js,npm/html-midi-player@1.4.0"></script>
 </head>
 <body>
 
-    <h3>MIDIファイルを選択して再生</h3>
+  <input type="file" id="fileInput" accept=".mid,.midi">
 
-    <div class="controls">
-        <!-- ファイル選択ボタン -->
-        <input type="file" id="fileInput" accept=".mid,.midi">
-    </div>
+  <midi-player id="player" sound-font></midi-player>
 
-    <!-- プレイヤー（初期状態のsrcは空） -->
-    <midi-player
-        id="myPlayer"
-        sound-font="https://googleapis.com"
-        visualizer="#myVisualizer">
-    </midi-player>
+  <script>
+    const input = document.getElementById('fileInput');
+    const player = document.getElementById('player');
 
-    <!-- ビジュアライザー -->
-    <midi-visualizer type="piano-roll" id="myVisualizer"></midi-visualizer>
-
-    <script>
-        const fileInput = document.getElementById('fileInput');
-        const player = document.getElementById('myPlayer');
-        const visualizer = document.getElementById('myVisualizer');
-
-        fileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                // 1. 選択されたファイルのURLを作成
-                const fileURL = URL.createObjectURL(file);
-
-                // 2. プレイヤーとビジュアライザーにURLをセット
-                player.src = fileURL;
-                visualizer.src = fileURL;
-            }
-        });
-    </script>
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (!file) return;
+      player.src = URL.createObjectURL(file);
+    });
+  </script>
 
 </body>
 </html>
