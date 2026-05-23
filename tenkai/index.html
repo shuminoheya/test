@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>libarchivejs Explorer</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #f5f5f5; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 16px; background: #e1e4e8; border-bottom: 1px solid #ccc;
+    }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #eee; }
+    tr:hover { background: #eaf3ff; cursor: pointer; }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <script type="module">
+    import { Archive } from './libarchive.js';
+
+    const fileInput = document.getElementById('archiveInput');
+    const tbody = document.getElementById('fileList');
+    const zipBtn = document.getElementById('zipDownloadBtn');
+
+    const extracted = [];
+
+    async function init() {
+      await Archive.init({ workerUrl: './worker-bundle.js' });
+    }
+
+    function formatSize(b) {
+      if (b > 1024*1024) return (b/1024/1024).toFixed(1)+" MB";
+      if (b > 1024) return (b/1024).toFixed(1)+" KB";
+      return b+" B";
+    }
+
+    async function openArchive(file) {
+      tbody.innerHTML = '';
+      extracted.length = 0;
+
+      const buf = await file.arrayBuffer();
+      const archive = await Archive.open(buf);
+
+      for (const entry of archive.entries()) {
+        if (entry.filetype !== 'file') continue;
+
+        const data = await entry.readData();
+        const path = entry.pathname;
+        const name = path.split('/').pop();
+
+        extracted.push({ path, name, data });
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${path}</td><td>${formatSize(data.byteLength)}</td>`;
+
+        tr.onclick = () => {
+          const blob = new Blob([data]);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) openArchive(file);
+    });
+
+    zipBtn.addEventListener('click', async () => {
+      if (!extracted.length) return alert('先にアーカイブを読み込んでください');
+
+      const zip = new JSZip();
+      extracted.forEach(f => zip.file(f.path, f.data));
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'converted.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    init();
+  </script>
+</head>
+
+<body>
+  <header>
+    <input id="archiveInput" type="file">
+    <button id="zipDownloadBtn">ZIP変換ダウンロード</button>
+  </header>
+
+  <table>
+    <thead>
+      <tr><th>名前</th><th>サイズ</th></tr>
+    </thead>
+    <tbody id="fileList"></tbody>
+  </table>
+</body>
+</html>
