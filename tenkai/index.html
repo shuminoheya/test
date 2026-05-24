@@ -1,30 +1,53 @@
-<!DOCTYPE html>
-<html lang="ja">
-<body>
-<h2>libarchivejs ロードテスト</h2>
-<div id="status">読み込み中...</div>
+<!doctype html>
+<html>
+  <head>
+    <title>test webworker</title>
+  </head>
+  <body>
+    <input type="file" id="file" />
 
-<script type="module">
-import { Archive } from './libarchive.js';
+    <script type="module">
+      function finish() {
+        const d = document.createElement("div");
+        d.setAttribute("id", "done");
+        d.textContent = "Done.";
+        document.body.appendChild(d);
+      }
 
-const status = document.getElementById('status');
+      /* ★ ここを修正：同じフォルダにある libarchive.js を読み込む */
+      import { Archive } from "./libarchive.js";
 
-async function test() {
-  try {
-    status.textContent = "libarchive.js 読み込み成功";
+      /* ★ checksum-utils.mjs が無いなら削除してOK */
+      // import { fileChecksums } from "../checksum-utils.mjs";
 
-    await Archive.init({
-      workerUrl: './worker-bundle.js'
-    });
+      /* ★ workerUrl も同じフォルダにある worker-bundle.js を指定 */
+      Archive.init({
+        workerUrl: "./worker-bundle.js",
+      });
 
-    status.textContent = "libarchive.js / worker-bundle.js / libarchive.wasm のロード成功";
-  } catch (err) {
-    status.textContent = "エラー: " + err;
-    console.error(err);
-  }
-}
+      window.Archive = Archive;
 
-test();
-</script>
-</body>
+      document.getElementById("file").addEventListener("change", async (e) => {
+        let obj = null;
+        try {
+          const file = e.currentTarget.files[0];
+
+          /* ★ Archive.open は File/Blob/ArrayBuffer どれでもOK */
+          const archive = await Archive.open(file);
+
+          /* ★ 展開してオブジェクトとして取得 */
+          obj = await archive.extractFiles();
+
+          /* ★ checksum-utils.mjs が無いならコメントアウト */
+          // obj = await fileChecksums(obj);
+
+        } catch (err) {
+          console.error(err);
+        } finally {
+          window.obj = obj;
+          finish();
+        }
+      });
+    </script>
+  </body>
 </html>
