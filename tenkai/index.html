@@ -5,7 +5,6 @@
   </head>
   <body>
     <input type="file" id="file" />
-
     <script type="module">
       function finish() {
         const d = document.createElement("div");
@@ -14,13 +13,9 @@
         document.body.appendChild(d);
       }
 
-      /* ★ ここを修正：同じフォルダにある libarchive.js を読み込む */
       import { Archive } from "./libarchive.js";
+      import { fileChecksums } from "./checksum-utils.mjs";
 
-      /* ★ checksum-utils.mjs が無いなら削除してOK */
-      // import { fileChecksums } from "../checksum-utils.mjs";
-
-      /* ★ workerUrl も同じフォルダにある worker-bundle.js を指定 */
       Archive.init({
         workerUrl: "./worker-bundle.js",
       });
@@ -31,16 +26,13 @@
         let obj = null;
         try {
           const file = e.currentTarget.files[0];
-
-          /* ★ Archive.open は File/Blob/ArrayBuffer どれでもOK */
           const archive = await Archive.open(file);
-
-          /* ★ 展開してオブジェクトとして取得 */
+          //console.log(await archive.getFilesObject());
+          //console.log( await archive.getFilesArray() );
           obj = await archive.extractFiles();
-
-          /* ★ checksum-utils.mjs が無いならコメントアウト */
-          // obj = await fileChecksums(obj);
-
+          //console.log(await archive.getFilesObject());
+          //console.log( await archive.getFilesArray() );
+          obj = await fileChecksums(obj);
         } catch (err) {
           console.error(err);
         } finally {
