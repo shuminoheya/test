@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ローマ字タイピング</title>
+  <title>ローマ字タイピング（最終完全版）</title>
   <style>
     body { font-family: sans-serif; padding: 40px; line-height: 1.8; }
     #stats { font-size: 1.2em; margin-bottom: 20px; }
@@ -24,91 +23,106 @@
 
 <body>
 
-  <iframe width="560" height="315" src="https://www.youtube.com/embed/skCiZ9IJmZY" 
+  <iframe width="560" height="315" src="https://www.youtube.com/embed/skCiZ9IJmZY"
     title="YouTube video player" frameborder="0" allowfullscreen></iframe>
 
   <div id="stats">
-    打鍵数: <span id="keystrokes">0</span>｜スピード: <span id="speed">0.00</span> 打/秒
+    打鍵数: <span id="keystrokes">0</span>｜
+    ミス: <span id="miss">0</span>｜
+    スピード: <span id="speed">0.00</span> 打/秒
   </div>
+
   <div id="japanese"></div>
   <div id="romaji"></div>
 
-  <script>
+<script>
+/* ============================================================
+   1. 基本ローマ字表
+   ============================================================ */
+const BASE_ROMAJI = {
+  " ": [" "],
+  "あ":["a"], "い":["i"], "う":["u"], "え":["e"], "お":["o"],
+  "か":["ka"], "き":["ki"], "く":["ku"], "け":["ke"], "こ":["ko"],
+  "さ":["sa"], "し":["shi","si","ci"],
+  "す":["su"], "せ":["se"], "そ":["so"],
+  "た":["ta"], "ち":["chi","ti"],
+  "つ":["tsu","tu"], "て":["te"], "と":["to"],
+  "な":["na"], "に":["ni"], "ぬ":["nu"], "ね":["ne"], "の":["no"],
+  "は":["ha"], "ひ":["hi"], "ふ":["fu","hu"], "へ":["he"], "ほ":["ho"],
+  "ま":["ma"], "み":["mi"], "む":["mu"], "め":["me"], "も":["mo"],
+  "や":["ya"], "ゆ":["yu"], "よ":["yo"],
+  "ら":["ra"], "り":["ri"], "る":["ru"], "れ":["re"], "ろ":["ro"],
+  "わ":["wa"], "を":["wo"], "ん":["n","nn","n'"],
+  "が":["ga"], "ぎ":["gi"], "ぐ":["gu"], "げ":["ge"], "ご":["go"],
+  "ざ":["za"], "じ":["ji","zi"], "ず":["zu"], "ぜ":["ze"], "ぞ":["zo"],
+  "だ":["da"], "ぢ":["ji","di"], "づ":["zu","du"], "で":["de"], "ど":["do"],
+  "ば":["ba"], "び":["bi"], "ぶ":["bu"], "べ":["be"], "ぼ":["bo"],
+  "ぱ":["pa"], "ぴ":["pi"], "ぷ":["pu"], "ぺ":["pe"], "ぽ":["po"],
+  "っ":["xtu","ttu"]
+};
 
-  /* --- あなたの KANA_ROMA & kana2roma をそのまま使用 --- */
+/* ============================================================
+   2. 拗音の二段階変換を自動生成
+   ============================================================ */
+const SMALL = { "ゃ":"ya", "ゅ":"yu", "ょ":"yo" };
 
-  const KANA_ROMA = {
-    "あ":"a","い":"i","う":"u","え":"e","お":"o",
-    "か":"ka","き":"ki","く":"ku","け":"ke","こ":"ko",
-    "さ":"sa","し":"shi","す":"su","せ":"se","そ":"so",
-    "た":"ta","ち":"chi","つ":"tsu","て":"te","と":"to",
-    "な":"na","に":"ni","ぬ":"nu","ね":"ne","の":"no",
-    "は":"ha","ひ":"hi","ふ":"fu","へ":"he","ほ":"ho",
-    "ま":"ma","み":"mi","む":"mu","め":"me","も":"mo",
-    "や":"ya","ゆ":"yu","よ":"yo",
-    "ら":"ra","り":"ri","る":"ru","れ":"re","ろ":"ro",
-    "わ":"wa","ん":"n",
-    "が":"ga","ぎ":"gi","ぐ":"gu","げ":"ge","ご":"go",
-    "ざ":"za","じ":"ji","ず":"zu","ぜ":"ze","ぞ":"zo",
-    "だ":"da","ぢ":"ji","づ":"zu","で":"de","ど":"do",
-    "ば":"ba","び":"bi","ぶ":"bu","べ":"be","ぼ":"bo",
-    "ぱ":"pa","ぴ":"pi","ぷ":"pu","ぺ":"pe","ぽ":"po",
-    "きゃ":"kya","きゅ":"kyu","きょ":"kyo",
-    "しゃ":"sha","しゅ":"shu","しょ":"sho",
-    "ちゃ":"cha","ちゅ":"chu","ちょ":"cho",
-    "にゃ":"nya","にゅ":"nyu","にょ":"nyo",
-    "ひゃ":"hya","ひゅ":"hyu","ひょ":"hyo",
-    "みゃ":"mya","みゅ":"myu","みょ":"myo",
-    "りゃ":"rya","りゅ":"ryu","りょ":"ryo",
-    "ぎゃ":"gya","ぎゅ":"gyu","ぎょ":"gyo",
-    "じゃ":"ja","じゅ":"ju","じょ":"jo",
-    "ぢゃ":"ja","ぢゅ":"ju","ぢょ":"jo",
-    "びゃ":"bya","びゅ":"byu","びょ":"byo",
-    "ぴゃ":"pya","ぴゅ":"pyu","ぴょ":"pyo",
-    "ぃ": "i",
-    "ふぁ": "fa", "ふぇ": "fe",
-  };
+function generateYouon(kana) {
+  const base = kana[0];     // し, ち, じ, etc
+  const small = SMALL[kana[1]];
 
-  const kana2roma = (s) => {
-    const res = [];
-    let tflg = false;
-    let nflg = false;
-    for (let i = 0; i < s.length; i++) {
-      const c = s[i];
-      let roma = null;
-      if (c == " " || c == "　") {
-        roma = " ";
-      } else if ("ゃゅょぁぇ".indexOf(s[i + 1]) >= 0) {
-        roma = KANA_ROMA[s.substring(i, i + 2)];
-        i++;
-      } else if (c == "ー") {
-        continue;
-      } else if (c == "っ") {
-        tflg = true;
-        continue;
-      } else if ("0123456789".indexOf(c) >= 0) {
-        roma = " " + c + "-";
-      } else {
-        roma = KANA_ROMA[c];
-      }
-      if (!roma) throw new Error("can't convert! " + s);
+  let roots = [];
 
-      if (tflg) {
-        res.push(roma[0] == "c" ? "t" : roma[0]);
-        tflg = false;
-      }
-      if (nflg) {
-        if ("aiueoy".indexOf(roma[0]) >= 0) res.push("-");
-        nflg = false;
-      }
-      res.push(roma);
-      if (c == "ん") nflg = true;
+  if (base === "し") roots = ["sh","sy","si","shi"];
+  else if (base === "ち") roots = ["ch","ty","ti","chi"];
+  else if (base === "じ") roots = ["j","zy","zi","ji"];
+  else roots = [BASE_ROMAJI[base][0][0]]; // fallback
+
+  const out = [];
+
+  for (const r of roots) {
+    // 標準
+    out.push(r + small);
+
+    // si 系
+    if (r === "si" || r === "shi") {
+      out.push(r + "x" + small);
+      out.push(r + "l" + small);
     }
-    return res.join("").replace(/ou/g, "o").replace(/oo/g, "o").replace(/uu/g, "u");
-  };
+  }
 
-  /* --- タイピングゲーム本体 --- */
+  return out;
+}
 
+/* ============================================================
+   3. ROMAJI を拡張（拗音に二段階変換を追加）
+   ============================================================ */
+const ROMAJI = JSON.parse(JSON.stringify(BASE_ROMAJI));
+
+["しゃ","しゅ","しょ","ちゃ","ちゅ","ちょ","じゃ","じゅ","じょ"].forEach(k => {
+  ROMAJI[k] = generateYouon(k);
+});
+
+/* ============================================================
+   4. かな → 音節分割
+   ============================================================ */
+function splitKana(text) {
+  const res = [];
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const n = text[i+1];
+    if ("ゃゅょ".includes(n)) {
+      res.push(c+n);
+      i++;
+    } else {
+      res.push(c);
+    }
+  }
+  return res;
+}
+
+/* ============================================================
+   5. タイピングゲーム本体
+   ============================================================ */
 const sentences = [
   { jp: "月には叢雲 華には風と", hira: "つきにはむらくも はなにはかぜと" },
   { jp: "朧深に隠れた 焦燥", hira: "おぼろぶかにかくれた しょうそう" },
@@ -143,60 +157,151 @@ const sentences = [
   { jp: "待ち続けよう 輪廻の時を", hira: "まちつづけよう りんねのときを" },
   { jp: "慈しむ心に 誓って", hira: "いつくしむこころに ちかって" }
 ];
-  const japaneseDiv = document.getElementById("japanese");
-  const romajiDiv = document.getElementById("romaji");
-  const keystrokesDisplay = document.getElementById("keystrokes");
-  const speedDisplay = document.getElementById("speed");
+let currentSentence = 0;
+let syllables = [];
+let fixed = [];
+let buffer = "";
+let idx = 0;
 
-  let currentSentence = 0;
-  let currentIndex = 0;
-  let keystrokes = 0;
-  let startTime = null;
-  let romajiText = "";
+let keystrokes = 0;
+let miss = 0;
+let startTime = null;
 
-  function loadSentence(index) {
-    const s = sentences[index];
-    japaneseDiv.textContent = s.jp;
-    romajiText = kana2roma(s.hira);
-    currentIndex = 0;
-    romajiDiv.innerHTML = `<span class="current">${romajiText[0]}</span>${romajiText.slice(1)}`;
+const jpDiv = document.getElementById("japanese");
+const romaDiv = document.getElementById("romaji");
+const ksDisp = document.getElementById("keystrokes");
+const missDisp = document.getElementById("miss");
+const speedDisp = document.getElementById("speed");
+
+/* ============================================================
+   6. 表示更新
+   ============================================================ */
+function buildRomaji() {
+  let out = "";
+  for (let i = 0; i < syllables.length; i++) {
+    const kana = syllables[i];
+    const list = ROMAJI[kana] || [kana];
+
+    if (i < idx) {
+      out += fixed[i];
+    } else if (i === idx) {
+      if (!buffer) out += list[0];
+      else {
+        const m = list.filter(c => c.startsWith(buffer));
+        out += (m[0] || list[0]);
+      }
+    } else {
+      out += list[0];
+    }
+  }
+  return out;
+}
+
+function typedLen() {
+  let len = 0;
+  for (let i = 0; i < idx; i++) len += fixed[i].length;
+  len += buffer.length;
+  return len;
+}
+
+function updateDisplay() {
+  const r = buildRomaji();
+  const t = typedLen();
+  romaDiv.innerHTML =
+    `<span class="typed">${r.slice(0,t)}</span>` +
+    `<span class="current">${r[t] || ""}</span>` +
+    r.slice(t+1);
+}
+
+/* ============================================================
+   7. 文ロード
+   ============================================================ */
+function loadSentence(n) {
+  const s = sentences[n];
+  jpDiv.textContent = s.jp;
+
+  syllables = splitKana(s.hira);
+  fixed = new Array(syllables.length).fill("");
+  buffer = "";
+  idx = 0;
+
+  keystrokes = 0;
+  miss = 0;
+  startTime = null;
+
+  ksDisp.textContent = "0";
+  missDisp.textContent = "0";
+  speedDisp.textContent = "0.00";
+
+  updateDisplay();
+}
+
+/* ============================================================
+   8. 特殊途中入力（sh / ch）
+   ============================================================ */
+function isSpecialPrefix(kana, buf) {
+  if (kana === "し" && buf === "sh") return true;
+  if (kana === "ち" && buf === "ch") return true;
+  return false;
+}
+
+/* ============================================================
+   9. キー入力
+   ============================================================ */
+document.addEventListener("keydown", e => {
+  const key = e.key;
+  if (key.length !== 1) return;
+
+  if (!startTime) startTime = Date.now();
+
+  keystrokes++;
+  ksDisp.textContent = keystrokes;
+
+  const kana = syllables[idx];
+  const list = ROMAJI[kana] || [kana];
+
+  buffer += key;
+
+  let matches = list.filter(c => c.startsWith(buffer));
+
+  if (matches.length === 0 && isSpecialPrefix(kana, buffer)) {
+    updateDisplay();
+    return;
   }
 
-  document.addEventListener("keydown", (e) => {
-    if (!startTime) startTime = Date.now();
-    const key = e.key;
-    if (key.length === 1) {
-      keystrokes++;
-      keystrokesDisplay.textContent = keystrokes;
+  if (matches.length === 0) {
+    miss++;
+    missDisp.textContent = miss;
+    buffer = "";
+    updateDisplay();
+    return;
+  }
 
-      const expected = romajiText[currentIndex];
+  updateDisplay();
 
-      if (key === expected) {
-        currentIndex++;
-        const elapsed = (Date.now() - startTime) / 1000;
-        speedDisplay.textContent = (keystrokes / elapsed).toFixed(2);
+  if (list.includes(buffer)) {
+    fixed[idx] = buffer;
+    buffer = "";
+    idx++;
 
-        const typed = `<span class="typed">${romajiText.slice(0, currentIndex)}</span>`;
-        const current = `<span class="current">${romajiText[currentIndex] || ""}</span>`;
-        const rest = romajiText.slice(currentIndex + 1);
-        romajiDiv.innerHTML = typed + current + rest;
+    const elapsed = (Date.now() - startTime) / 1000;
+    speedDisp.textContent = (keystrokes / elapsed).toFixed(2);
 
-        if (currentIndex >= romajiText.length) {
-          currentSentence++;
-          if (currentSentence < sentences.length) {
-            setTimeout(() => loadSentence(currentSentence), 300);
-          } else {
-            alert("終わりだ。");
-            romajiDiv.innerHTML = "";
-            japaneseDiv.textContent = "";
-          }
-        }
+    if (idx >= syllables.length) {
+      currentSentence++;
+      if (currentSentence < sentences.length) {
+        setTimeout(() => loadSentence(currentSentence), 300);
+      } else {
+        alert("終わりだ。");
       }
+      return;
     }
-  });
+    updateDisplay();
+  }
+});
 
-  loadSentence(currentSentence);
+loadSentence(currentSentence);
+</script>
 
-  </script>
 </body>
 </html>
