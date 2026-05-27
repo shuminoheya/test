@@ -54,7 +54,8 @@ const BASE_ROMAJI = {
   "ら":["ra"], "り":["ri"], "る":["ru"], "れ":["re"], "ろ":["ro"],
   "わ":["wa"], "を":["wo"], "ん":["n","nn","n'"],
   "が":["ga"], "ぎ":["gi"], "ぐ":["gu"], "げ":["ge"], "ご":["go"],
-  "ざ":["za"], "じ":["ji","zi"], "ず":["zu"], "ぜ":["ze"], "ぞ":["zo"],
+  "ざ":["za"], "じ":["ji","zi"],
+  "ず":["zu"], "ぜ":["ze"], "ぞ":["zo"],
   "だ":["da"], "ぢ":["ji","di"], "づ":["zu","du"], "で":["de"], "ど":["do"],
   "ば":["ba"], "び":["bi"], "ぶ":["bu"], "べ":["be"], "ぼ":["bo"],
   "ぱ":["pa"], "ぴ":["pi"], "ぷ":["pu"], "ぺ":["pe"], "ぽ":["po"],
@@ -67,7 +68,7 @@ const BASE_ROMAJI = {
 const SMALL = { "ゃ":"ya", "ゅ":"yu", "ょ":"yo" };
 
 function generateYouon(kana) {
-  const base = kana[0];     // し, ち, じ, etc
+  const base = kana[0];
   const small = SMALL[kana[1]];
 
   let roots = [];
@@ -75,7 +76,13 @@ function generateYouon(kana) {
   if (base === "し") roots = ["sh","sy","si","shi"];
   else if (base === "ち") roots = ["ch","ty","ti","chi"];
   else if (base === "じ") roots = ["j","zy","zi","ji"];
-  else roots = [BASE_ROMAJI[base][0][0]]; // fallback
+　else if (base === "き") roots = ["k","cy","ci","ki"];
+  else {
+    // それ以外の行（にゃ、ひゃ、みゃ等）は標準だけでOK
+    const def = BASE_ROMAJI[base][0];
+    const head = def[0];
+    roots = [head];
+  }
 
   const out = [];
 
@@ -83,8 +90,8 @@ function generateYouon(kana) {
     // 標準
     out.push(r + small);
 
-    // si 系
-    if (r === "si" || r === "shi") {
+    // si/shi/ti/chi/zi/ji 系 → 二段階変換
+    if (r.endsWith("i")) {
       out.push(r + "x" + small);
       out.push(r + "l" + small);
     }
@@ -98,7 +105,7 @@ function generateYouon(kana) {
    ============================================================ */
 const ROMAJI = JSON.parse(JSON.stringify(BASE_ROMAJI));
 
-["しゃ","しゅ","しょ","ちゃ","ちゅ","ちょ","じゃ","じゅ","じょ"].forEach(k => {
+["しゃ","しゅ","しょ","ちゃ","ちゅ","ちょ","じゃ","じゅ","じょ","きゅ"].forEach(k => {
   ROMAJI[k] = generateYouon(k);
 });
 
@@ -124,15 +131,7 @@ function splitKana(text) {
    5. タイピングゲーム本体
    ============================================================ */
 const sentences = [
-  { jp: "月には叢雲 華には風と", hira: "つきにはむらくも はなにはかぜと" },
-  { jp: "朧深に隠れた 焦燥", hira: "おぼろぶかにかくれた しょうそう" },
-  { jp: "瞼焼き付いた顔", hira: "まぶたやきついたかお" },
-  { jp: "理解者の証さえ", hira: "りかいしゃのあかしさえ" },
-  { jp: "刹那、退屈の隙間贖い 心燻り", hira: "せつな たいくつのすきまあがない こころくずぶり" },
-  { jp: "不安を産み出した", hira: "ふあんをうみだした" },
-  { jp: "盲目、消えた安らぎに出会って", hira: "もうもく きえたやすらぎにであって" },
-  { jp: "芽生えた恋情 譲る気は無い", hira: "めばえたれんじょう ゆずるきはない" },
-  { jp: "月には叢雲 華には風と", hira: "つきにはむらくも はなにはかぜと" },
+
   { jp: "此方より彼方へ永久 築けぬなら", hira: "こなたよりかなたへえいきゅう きずけぬなら" },
   { jp: "雲突き抜け 風斬り裂いて", hira: "くもつきぬけ かぜきりさいて" },
   { jp: "久遠の揺蕩いへ 誘う", hira: "くおんのたゆたいへ いざなう" },
@@ -157,6 +156,7 @@ const sentences = [
   { jp: "待ち続けよう 輪廻の時を", hira: "まちつづけよう りんねのときを" },
   { jp: "慈しむ心に 誓って", hira: "いつくしむこころに ちかって" }
 ];
+
 let currentSentence = 0;
 let syllables = [];
 let fixed = [];
@@ -227,7 +227,7 @@ function loadSentence(n) {
 
   keystrokes = 0;
   miss = 0;
-  startTime = null;
+  startTime = Date.now();  // ★ 文開始時刻を固定
 
   ksDisp.textContent = "0";
   missDisp.textContent = "0";
@@ -251,8 +251,6 @@ function isSpecialPrefix(kana, buf) {
 document.addEventListener("keydown", e => {
   const key = e.key;
   if (key.length !== 1) return;
-
-  if (!startTime) startTime = Date.now();
 
   keystrokes++;
   ksDisp.textContent = keystrokes;
