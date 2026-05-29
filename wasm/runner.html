@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Wasm 読み込みテスト</title>
+</head>
+<body>
+    <h2>コンパイルされたWasmの実行</h2>
+    <button onclick="loadAndRun()">Wasmを実行してメモリを読む</button>
+    <p id="output"></p>
+
+    <script>
+        async function loadAndRun() {
+            try {
+                // 1. Wasmと共有するメモリ（1ページ=64KB）を確保
+                const memory = new WebAssembly.Memory({ initial: 1 });
+
+                // 2. Wasmを読み込み、メモリを渡す
+                const response = await fetch('compiled.wasm');
+                const bytes = await response.arrayBuffer();
+                const { instance } = await WebAssembly.instantiate(bytes, {
+                    env: { memory: memory }
+                });
+
+                // 3. Wasm内の関数を実行（これでメモリに文字が書き込まれる）
+                instance.exports.decode();
+
+                // 4. メモリ（バイト配列）からテキストを復元
+                const uint8Array = new Uint8Array(memory.buffer, 0, 3); // 3文字分読み込み
+                const text = new TextDecoder().decode(uint8Array);
+
+                document.getElementById('output').innerText = `取り出した文字列: ${text}`;
+            } catch (e) {
+                alert("エラー: 先に 'compiled.wasm' をこのHTMLと同じフォルダに配置してください。\n" + e);
+            }
+        }
+    </script>
+</body>
+</html>
