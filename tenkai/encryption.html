@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <title>test webworker</title>
+  </head>
+  <body>
+    <input type="file" id="file" />
+    <script type="module">
+      function finish() {
+        const d = document.createElement("div");
+        d.setAttribute("id", "done");
+        d.textContent = "Done.";
+        document.body.appendChild(d);
+      }
+
+      import { Archive } from "/dist/libarchive.js";
+      import { fileChecksums } from "../checksum-utils.mjs";
+
+      window.Archive = Archive;
+
+      document.getElementById("file").addEventListener("change", async (e) => {
+        let obj = null,
+          encEntries = false;
+        try {
+          const file = e.currentTarget.files[0];
+          const archive = await Archive.open(file);
+          encEntries = await archive.hasEncryptedData();
+          await archive.usePassword("nika");
+          obj = await archive.extractFiles();
+          obj = await fileChecksums(obj);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          window.obj = { files: obj, encrypted: encEntries };
+          finish();
+        }
+      });
+    </script>
+  </body>
+</html>
