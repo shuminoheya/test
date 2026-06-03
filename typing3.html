@@ -105,7 +105,7 @@ function generateYouon(kana) {
    ============================================================ */
 const ROMAJI = JSON.parse(JSON.stringify(BASE_ROMAJI));
 
-["しゃ","しゅ","しょ","ちゃ","ちゅ","ちょ","じゃ","じゅ","じょ","きゅ"].forEach(k => {
+["しゃ","しゅ","しょ","ちゃ","ちゅ","ちょ","じゃ","じゅ","じょ","きゅ","びょ"].forEach(k => {
   ROMAJI[k] = generateYouon(k);
 });
 
