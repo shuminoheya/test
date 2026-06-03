@@ -75,6 +75,7 @@ function generateYouon(kana) {
 
   if (base === "し") roots = ["sh","sy","si","shi"];
   else if (base === "ち") roots = ["ch","ty","ti","chi"];
+  else if (base === "び") roots = ["bi"];
   else if (base === "じ") roots = ["j","zy","zi","ji"];
 　else if (base === "き") roots = ["k","cy","ci","ki"];
   else {
@@ -252,7 +253,7 @@ function loadSentence(n) {
 function isSpecialPrefix(kana, buf) {
   if (kana === "し" && buf === "sh") return true;
   if (kana === "ち" && buf === "ch") return true;
-  if (kana === "びょ" && buf === "bixyo") return true;
+  if (kana === "び" && buf === "bi") return true;
   return false;
 }
 
