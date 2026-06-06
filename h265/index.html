@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>H.265 WASM 再生画面</title>
+    <!-- 1. 提示されたJavaScriptファイルを読み込む -->
+    <script src="h265_decoder.js"></script>
+</head>
+<body>
+
+    <h1>H.265 (HEVC) WASM プレイヤー</h1>
+    <!-- 動画を描画するキャンバス -->
+    <canvas id="video-canvas" width="640" height="360" style="background:#000;"></style>
+
+    <script>
+        async function initPlayer() {
+            try {
+                // 2. 提示されたコードの関数を実行し、WASMバイナリをロードする
+                // locateFileを使って、.wasmファイルの場所を明示的に指定します
+                const Module = await WasmModule({
+                    locateFile: function(path) {
+                        if (path.endsWith('.wasm')) {
+                            return 'h265_decoder.wasm'; // 実際のWASMファイル名
+                        }
+                        return path;
+                    },
+                    print: function(text) { console.log('WASMログ:', text); },
+                    printErr: function(text) { console.error('WASMエラー:', text); }
+                });
+
+                console.log("WASMの読み込みが成功しました！", Module);
+
+                // 3. 動画ファイルの読み込みとデコード処理
+                // ※実際の再生処理（デコード関数の呼び出しなど）は、
+                // このModuleオブジェクトに生えているC/C++由来の関数（Module._decode_frame等）を呼び出します。
+                
+            } catch (error) {
+                console.error("WASMの初期化に失敗しました。原因:", error);
+            }
+        }
+
+        // ページ読み込み時に実行
+        initPlayer();
+    </script>
+</body>
+</html>
