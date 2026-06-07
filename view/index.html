@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>フォルダ内の動画をランダム再生</title>
+  <style>
+    body { font-family: sans-serif; }
+    #controls { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>フォルダ内の動画をランダム再生</h1>
+
+  <!-- フォルダ選択（Chrome系などで有効） -->
+  <input id="folderInput" type="file" webkitdirectory multiple>
+  <div id="controls">
+    <button id="playRandomBtn" disabled>ランダム再生</button>
+    <button id="nextBtn" disabled>次のランダム動画</button>
+  </div>
+
+  <video id="player" width="640" height="360" controls></video>
+
+  <script>
+    const folderInput   = document.getElementById('folderInput');
+    const playRandomBtn = document.getElementById('playRandomBtn');
+    const nextBtn       = document.getElementById('nextBtn');
+    const player        = document.getElementById('player');
+
+    let videoFiles = [];
+
+    // 対応する拡張子（必要に応じて追加）
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.mkv'];
+
+    function isVideoFile(file) {
+      const name = file.name.toLowerCase();
+      return videoExtensions.some(ext => name.endsWith(ext));
+    }
+
+    folderInput.addEventListener('change', () => {
+      const files = Array.from(folderInput.files || []);
+      videoFiles = files.filter(isVideoFile);
+
+      if (videoFiles.length === 0) {
+        alert('このフォルダには対応する動画ファイルがありません。');
+        playRandomBtn.disabled = true;
+        nextBtn.disabled = true;
+        player.removeAttribute('src');
+        player.load();
+        return;
+      }
+
+      playRandomBtn.disabled = false;
+      nextBtn.disabled = false;
+      // 最初のランダム動画を自動再生したい場合はここで呼ぶ
+      // playRandomVideo();
+    });
+
+    function playRandomVideo() {
+      if (videoFiles.length === 0) return;
+
+      const randomIndex = Math.floor(Math.random() * videoFiles.length);
+      const file = videoFiles[randomIndex];
+
+      const url = URL.createObjectURL(file);
+      player.src = url;
+      player.play();
+    }
+
+    playRandomBtn.addEventListener('click', () => {
+      playRandomVideo();
+    });
+
+    nextBtn.addEventListener('click', () => {
+      playRandomVideo();
+    });
+
+    // 動画終了後に自動で次のランダム動画を再生したい場合
+    player.addEventListener('ended', () => {
+      playRandomVideo();
+    });
+  </script>
+</body>
+</html>
