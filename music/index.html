@@ -2,19 +2,18 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>同じフォルダの音声をランダム再生</title>
+  <title>ランダム音声プレイヤー</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     #controls { margin: 10px 0; }
   </style>
 </head>
 <body>
-  <h1>同じフォルダの音声をランダム再生</h1>
+  <h1>ランダム音声プレイヤー</h1>
 
   <div id="controls">
-    <button id="scanBtn">フォルダをスキャン</button>
-    <button id="playRandomBtn" disabled>ランダム再生</button>
-    <button id="nextBtn" disabled>次の音声</button>
+    <button id="playRandomBtn">ランダム再生</button>
+    <button id="nextBtn">次の音声</button>
   </div>
 
   <audio id="player" controls></audio>
@@ -22,102 +21,48 @@
 
   <script>
     const player = document.getElementById('player');
-    const scanBtn = document.getElementById('scanBtn');
     const playRandomBtn = document.getElementById('playRandomBtn');
     const nextBtn = document.getElementById('nextBtn');
     const status = document.getElementById('status');
 
-    let audioFiles = [];
-
-    // 対応拡張子
-    const exts = ['mp3', 'flac'];
-
-    // 「ディレクトリ内にありそうなファイル名」を総当たりで作る
-    // → 実際に存在するものだけ拾う
-    async function scanFiles() {
-      status.textContent = "スキャン中…";
-
-      const found = [];
-
-      // 1. 000〜999 の番号 + 任意タイトルを想定
-      //    例: "01. A Dream More Scarlet than Red.mp3"
-      for (let i = 0; i <= 200; i++) {
-        const prefix = String(i).padStart(2, '0') + '. ';
-        for (const ext of exts) {
-          // タイトル部分は分からないので「存在するかだけチェック」
-          // 例: "01. " で始まるファイルを総当たり
-          const candidates = [
-            `${prefix}A Dream More Scarlet than Red.${ext}`,
-            `${prefix}Ghostly Dream ~ Snow or Cherry Petal.${ext}`,
-            `${prefix}Shrine Maiden Crowned with Glory.${ext}`,
-            `${prefix}A Soul as Scarlet as a Ground Cherry.${ext}`,
-            `${prefix}Beloved Dwelling of Dust.${ext}`,
-            `${prefix}Apparitions Stalk the Night.${ext}`,
-            `${prefix}Even if Forgotten by the World.${ext}`,
-            `${prefix}Lunate Elf.${ext}`,
-            `${prefix}Tomboyish Girl in Love.${ext}`,
-            `${prefix}Shanghai Scarlet Teahouse ~ Chinese Tea.${ext}`,
-            `${prefix}The Gensokyo the Gods Loved.${ext}`,
-            `${prefix}Shanghai Alice of Meiji 17.${ext}`,
-            `${prefix}Satori Maiden ~ 3rd eye.${ext}`,
-            `${prefix}Love-Colored Master Spark.${ext}`,
-            `${prefix}Septette for a Dead Princess.${ext}`,
-            `${prefix}The Centennial Festival for Magical Girls.${ext}`,
-            `${prefix}Hallucination Atop a Bivalve.${ext}`,
-            `${prefix}Hartmann's Youkai Girl.${ext}`,
-            `${prefix}U.N. Owen Was Her.${ext}`,
-            `${prefix}Extend Ash ~ Person of Hourai.${ext}`,
-            `${prefix}Extend Ash ~ Person of Hourai (1).${ext}`,
-            `${prefix}Necrofantasia.${ext}`,
-            `${prefix}Reach for the Moon, Immortal Smoke.${ext}`
-          ];
-
-          for (const name of candidates) {
-            try {
-              const res = await fetch(name, { method: "HEAD" });
-              if (res.ok) found.push(name);
-            } catch (e) {}
-          }
-        }
-      }
-
-      // 2. x00_ 系 flac
-      const extra = [
-        "x00_title.flac",
-        "x01_stage1.flac",
-        "x02_ubame.flac",
-        "x16_bossx.flac"
-      ];
-
-      for (const name of extra) {
-        try {
-          const res = await fetch(name, { method: "HEAD" });
-          if (res.ok) found.push(name);
-        } catch (e) {}
-      }
-
-      audioFiles = found;
-
-      if (audioFiles.length === 0) {
-        status.textContent = "音声ファイルが見つかりませんでした。";
-        playRandomBtn.disabled = true;
-        nextBtn.disabled = true;
-      } else {
-        status.textContent = `${audioFiles.length} 件の音声を検出しました。`;
-        playRandomBtn.disabled = false;
-        nextBtn.disabled = false;
-      }
-    }
+    // ★ Safari で安定させるための「固定リスト」
+    const audioFiles = [
+      "01. A Dream More Scarlet than Red.mp3",
+      "01. Ghostly Dream ~ Snow or Cherry Petal.mp3",
+      "01. Shrine Maiden Crowned with Glory.mp3",
+      "02. A Soul as Scarlet as a Ground Cherry.mp3",
+      "02. Beloved Dwelling of Dust.mp3",
+      "03. Apparitions Stalk the Night.mp3",
+      "03. Even if Forgotten by the World.mp3",
+      "04. Lunate Elf.mp3",
+      "05. Tomboyish Girl in Love.mp3",
+      "06. Shanghai Scarlet Teahouse ~ Chinese Tea.mp3",
+      "06. The Gensokyo the Gods Loved.mp3",
+      "07. Shanghai Alice of Meiji 17.mp3",
+      "09. Satori Maiden ~ 3rd eye.mp3",
+      "10. Love-Colored Master Spark.mp3",
+      "13. Septette for a Dead Princess.mp3",
+      "14. The Centennial Festival for Magical Girls.mp3",
+      "15. Hallucination Atop a Bivalve.mp3",
+      "15. Hartmann's Youkai Girl.mp3",
+      "15. U.N. Owen Was Her.mp3",
+      "17. Extend Ash ~ Person of Hourai (1).mp3",
+      "17. Extend Ash ~ Person of Hourai.mp3",
+      "18. Necrofantasia.mp3",
+      "18. Reach for the Moon, Immortal Smoke.mp3",
+      "x00_title.flac",
+      "x01_stage1.flac",
+      "x02_ubame.flac",
+      "x16_bossx.flac"
+    ];
 
     function playRandom() {
-      if (audioFiles.length === 0) return;
       const file = audioFiles[Math.floor(Math.random() * audioFiles.length)];
       player.src = file;
       player.play();
       status.textContent = `再生中: ${file}`;
     }
 
-    scanBtn.addEventListener('click', scanFiles);
     playRandomBtn.addEventListener('click', playRandom);
     nextBtn.addEventListener('click', playRandom);
 
