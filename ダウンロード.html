@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>完全再帰 Web ダウンローダー（CORSプロキシ＋全部＋フォルダ構成保持）</title>
+<style>
+#log {
+    white-space: pre-wrap;
+    background: #222;
+    color: #0f0;
+    padding: 10px;
+    height: 300px;
+    overflow-y: scroll;
+    margin-top: 20px;
+}
+</style>
+</head>
+<body>
+<h2>完全再帰 Web ダウンローダー（CORSプロキシ＋全部＋フォルダ構成保持）</h2>
+
+<input id="url" type="text" size="60" placeholder="https://example.com/index.html">
+<input id="proxy" type="text" size="40" placeholder="https://your-proxy.example.com/">
+<button id="run">開始</button>
+
+<div id="log"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+function log(msg) {
+    const box = document.getElementById("log");
+    box.textContent += msg + "\n";
+    box.scrollTop = box.scrollHeight;
+}
+
+// プロキシ経由で URL を叩くためのラッパ
+function proxied(url, proxyBase) {
+    if (!proxyBase) return url;
+    // 例: proxy?url=ENCODED
+    const u = new URL(proxyBase);
+    u.searchParams.set("url", url);
+    return u.toString();
+}
+
+async function fetchResource(url, proxyBase) {
+    const purl = proxied(url, proxyBase);
+    log("取得中: " + url + " (via " + purl + ")");
+    const res = await fetch(purl);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const contentType = res.headers.get("content-type") || "";
+    const blob = await res.blob();
+    return { blob, contentType };
+}
+
+function isTextLike(path, contentType) {
+    const ext = (path.split(".").pop() || "").toLowerCase();
+
+    if (contentType.startsWith("text/")) return true;
+    if (contentType.includes("javascript")) return true;
+    if (contentType.includes("json")) return true;
+    if (contentType.includes("xml")) return true;
+
+    if (["html","htm","js","mjs","css","json","xml","svg","txt"].includes(ext)) return true;
+
+    return false;
+}
+
+function extractLinks(text, baseUrl) {
+    const urls = [];
+
+    // JS import
+    const importRegex = /import\s+(?:[^'"]*from\s+)?['"](.*?)['"]/g;
+    let m;
+    while ((m = importRegex.exec(text))) urls.push(m[1]);
+
+    // Worker
+    const workerRegex = /new\s+Worker\s*\(\s*['"](.*?)['"]/g;
+    while ((m = workerRegex.exec(text))) urls.push(m[1]);
+
+    // workerUrl: "xxx"
+    const workerUrlRegex = /workerUrl\s*:\s*['"](.*?)['"]/g;
+    while ((m = workerUrlRegex.exec(text))) urls.push(m[1]);
+
+    // fetch()
+    const fetchRegex = /fetch\s*\(\s*['"](.*?)['"]/g;
+    while ((m = fetchRegex.exec(text))) urls.push(m[1]);
+
+    // CSS url()
+    const cssUrlRegex = /url\(['"]?(.*?)['"]?\)/g;
+    while ((m = cssUrlRegex.exec(text))) urls.push(m[1]);
+
+    // HTML src/href
+    const htmlRegex = /(src|href)=['"](.*?)['"]/g;
+    while ((m = htmlRegex.exec(text))) urls.push(m[2]);
+
+    // JS 内のバイナリファイル名（wasm/unx/data/bin/mem/bundle）
+    const binaryRegex = /['"]([^'"]+\.(?:wasm|unx|data|bin|mem|bundle))['"]/gi;
+    while ((m = binaryRegex.exec(text))) urls.push(m[1]);
+
+    // 絶対 URL に変換
+    return urls.map(u => new URL(u, baseUrl).href);
+}
+
+function urlToPath(url, root) {
+    const u = new URL(url);
+    const r = new URL(root);
+
+    let path;
+    if (u.origin === r.origin) {
+        path = u.pathname.startsWith("/") ? u.pathname.slice(1) : u.pathname;
+    } else {
+        path = u.hostname + u.pathname;
+    }
+
+    if (!path || path.endsWith("/")) {
+        path = (path || "") + "index.html";
+    }
+    return path;
+}
+
+document.getElementById("run").onclick = async () => {
+    const startUrl = document.getElementById("url").value;
+    const proxyBase = document.getElementById("proxy").value.trim();
+    const zip = new JSZip();
+    const visited = new Set();
+
+    async function fetchSplitFiles(baseUrl) {
+        const base = new URL(baseUrl);
+        const dir = base.href.substring(0, base.href.lastIndexOf("/") + 1);
+        const name = base.href.substring(base.href.lastIndexOf("/") + 1);
+
+        const candidates = [];
+
+        for (let i = 1; i <= 50; i++) {
+            candidates.push(dir + name + ".part" + i);
+        }
+        for (let i = 1; i <= 50; i++) {
+            candidates.push(dir + name + "." + i);
+        }
+
+        for (const c of candidates) {
+            if (visited.has(c)) continue;
+            try {
+                const purl = proxied(c, proxyBase);
+                const res = await fetch(purl);
+                if (res.ok) {
+                    log("分割ファイル発見: " + c);
+                    await process(c);
+                }
+            } catch {}
+        }
+    }
+
+    async function process(url) {
+        if (visited.has(url)) return;
+        visited.add(url);
+
+        let res;
+        try {
+            res = await fetchResource(url, proxyBase);
+        } catch (e) {
+            log("失敗: " + url + " (" + e + ")");
+            return;
+        }
+
+        const path = urlToPath(url, startUrl);
+        zip.file(path, res.blob);
+        log("追加: " + path + " (" + res.contentType + ")");
+
+        if (!isTextLike(path, res.contentType)) return;
+
+        const text = await res.blob.text();
+        const links = extractLinks(text, url);
+
+        for (const link of links) {
+            await process(link);
+
+            if (link.match(/\.(unx|data|wasm|bin|bundle|mem)$/i)) {
+                await fetchSplitFiles(link);
+            }
+        }
+    }
+
+    log("=== 開始 ===");
+    await process(startUrl);
+
+    log("ZIP 生成中…");
+    const blob = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "site.zip";
+    a.click();
+    log("完了: site.zip をダウンロードしました");
+};
+</script>
+</body>
+</html>
