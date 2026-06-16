@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>7zip Explorer (7z-wasm 完全版)</title>
+<title>7zip Explorer (LZH日本語修正・完全版)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
 <script src="7zz.umd.js"></script>
@@ -109,6 +109,21 @@ document.getElementById("file").addEventListener("change", async e => {
   if (file) await loadArchive(file);
 });
 
+// 文字化けした日本語名を SJIS とみなして復元を試みる
+function fixSjisName(name) {
+  try {
+    const codes = Encoding.stringToCode(name);
+    const utf8 = Encoding.convert(codes, {
+      to: "UNICODE",
+      from: "SJIS",
+      type: "string"
+    });
+    return utf8;
+  } catch {
+    return name;
+  }
+}
+
 async function loadArchive(file){
   entries = [];
   folderTree = {};
@@ -121,7 +136,6 @@ async function loadArchive(file){
   sz.FS.writeFile(file.name, buf);
   sz.callMain(["x", file.name, "-y"]);
 
-  // 元アーカイブは FS から削除
   try { sz.FS.unlink("/" + file.name); } catch {}
 
   const paths = listAllFiles("/");
@@ -134,8 +148,10 @@ async function loadArchive(file){
       continue;
     }
     const blob = new Blob([data]);
+    const rawPath = path.replace(/^\//, "");
+    const fixedPath = fixSjisName(rawPath);
     entries.push({
-      path: path.replace(/^\//, ""),
+      path: fixedPath,
       file: blob
     });
   }
@@ -149,7 +165,6 @@ function normalizePath(p){
   return ("/" + p).replace(/\/+/g, "/");
 }
 
-// 仮想 FS の dev/home/proc/tmp は残しつつ、それ以外を走査
 function listAllFiles(dir){
   let result = [];
   let entriesFS;
@@ -174,7 +189,6 @@ function listAllFiles(dir){
     }
 
     if (sz.FS.isDir(stat.mode)){
-      // 仮想ディレクトリはスキップ
       if (full === "/dev" || full === "/proc" || full === "/home" || full === "/tmp") {
         continue;
       }
@@ -186,7 +200,6 @@ function listAllFiles(dir){
   return result;
 }
 
-// 仮想 FS から展開物だけ削除（dev/home/proc/tmp は残す）
 function cleanFSAll(){
   try {
     const all = listAllFiles("/");
@@ -361,14 +374,12 @@ document.getElementById("btnCompress").onclick = async () => {
 
   cleanFSAll();
 
-  // 展開した内容だけを書き戻す
   for(const entry of entries){
     const buf = new Uint8Array(await entry.file.arrayBuffer());
     ensureDir(entry.path);
     sz.FS.writeFile(normalizePath(entry.path), buf);
   }
 
-  // entries だけを圧縮対象にする
   const targets = entries.map(e => normalizePath(e.path));
   sz.callMain(["a", outName, ...targets]);
 
