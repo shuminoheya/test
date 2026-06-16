@@ -1,637 +1,290 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>7z-wasm</title>
+<title>7zip Explorer (7zz版)</title>
 
-<!-- ================================================
-     REQUIRED SOURCES:
-     1. 7zz.umd.js  - the JS wrapper (loaded from unpkg below)
-     2. 7zz.wasm    - loaded automatically by the JS via locateFile()
-     Both files live in the npm package "7z-wasm".
-     ================================================ -->
-<script src="7zz.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
-  @import url('css2.css');
+body { margin: 0; font-family: system-ui, sans-serif; }
+.toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: #f0f0f0;
+  border-bottom: 1px solid #ccc; font-size: 14px;
+}
+.explorer { display: flex; height: calc(100vh - 40px); }
+.tree {
+  width: 260px; border-right: 1px solid #ccc;
+  padding: 8px; overflow-y: auto; font-size: 13px;
+}
+.content { flex: 1; display: flex; flex-direction: column; }
+#fileList {
+  flex: 1; padding: 8px; border-bottom: 1px solid #ccc;
+  overflow-y: auto; font-size: 13px;
+}
+#preview { flex: 1; padding: 8px; overflow: auto; font-size: 13px; }
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ul { list-style: none; padding-left: 16px; margin: 0; }
+li { cursor: pointer; padding: 2px 0; }
+li:hover { background: #eee; }
 
-  :root {
-    --bg:       #0e0f11;
-    --surface:  #161719;
-    --border:   #2a2c30;
-    --accent:   #e8c547;
-    --accent2:  #4ea8de;
-    --text:     #d4d6db;
-    --muted:    #5c6070;
-    --success:  #4caf50;
-    --error:    #f44336;
-    --radius:   8px;
-  }
+.file-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 4px; cursor: pointer;
+}
+.file-item:hover { background: #e6f2ff; }
+.icon { width: 18px; text-align: center; }
+.name {
+  flex: 1; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.download-link { font-size: 12px; text-decoration: none; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 300;
-    min-height: 100vh;
-    padding: 32px 16px 64px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  /* --- Header --- */
-  header {
-    width: 100%;
-    max-width: 720px;
-    margin-bottom: 36px;
-    display: flex;
-    align-items: flex-end;
-    gap: 14px;
-  }
-  header .logo {
-    font-family: 'DM Mono', monospace;
-    font-size: 28px;
-    font-weight: 500;
-    color: var(--accent);
-    line-height: 1;
-  }
-  header .logo2 {
-    font-family: 'DM Mono', monospace;
-    font-size: 18px;
-    font-weight: 500;
-    color: var(--accent);
-    line-height: 1;
-  }
-  header .logo span { color: var(--text); }
-  header p {
-    font-size: 13px;
-    color: var(--muted);
-    padding-bottom: 3px;
-  }
-
-  /* --- Tabs --- */
-  .tabs {
-    width: 100%;
-    max-width: 720px;
-    display: flex;
-    gap: 2px;
-    margin-bottom: -1px;
-    position: relative;
-    z-index: 1;
-  }
-  .tab {
-    padding: 10px 22px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-bottom: none;
-    border-radius: var(--radius) var(--radius) 0 0;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-    font-size: 13px;
-    cursor: pointer;
-    transition: color .15s, background .15s;
-  }
-  .tab:hover { color: var(--text); }
-  .tab.active {
-    background: var(--surface);
-    border-color: var(--border);
-    color: var(--accent);
-    box-shadow: inset 0 2px 0 var(--accent);
-  }
-
-  /* --- Panel --- */
-  .panel {
-    width: 100%;
-    max-width: 720px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 0 var(--radius) var(--radius) var(--radius);
-    padding: 28px;
-    display: none;
-  }
-  .panel.active { display: block; }
-
-  /* --- Drop zone --- */
-  .dropzone {
-    border: 1.5px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 36px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color .2s, background .2s;
-    margin-bottom: 20px;
-    position: relative;
-  }
-  .dropzone:hover, .dropzone.drag-over {
-    border-color: var(--accent);
-    background: rgba(232,197,71,.04);
-  }
-  .dropzone input[type=file] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-  }
-  .dropzone .dz-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
-    display: block;
-  }
-  .dropzone p { color: var(--muted); font-size: 13px; }
-  .dropzone strong { color: var(--text); font-weight: 600; }
-
-  /* --- File list --- */
-  .file-list {
-    list-style: none;
-    margin-bottom: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .file-list li {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px 12px;
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-  }
-  .file-list li .fname { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-list li .fsize { color: var(--muted); white-space: nowrap; }
-  .file-list li .rm {
-    background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; line-height: 1;
-    transition: color .15s;
-  }
-  .file-list li .rm:hover { color: var(--error); }
-
-  /* --- Inputs --- */
-  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-  .field { margin-bottom: 16px; }
-  input[type=text] {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 9px 12px;
-    color: var(--text);
-    font-family: 'DM Mono', monospace;
-    font-size: 13px;
-    outline: none;
-    transition: border-color .15s;
-  }
-  input[type=text]:focus { border-color: var(--accent2); }
-
-  /* --- Buttons --- */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 10px 20px;
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    font-family: 'DM Mono', monospace;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all .15s;
-    text-decoration: none;
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: #0e0f11;
-    font-weight: 500;
-  }
-  .btn-primary:hover { background: #f0d060; }
-  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-  .btn-secondary {
-    background: transparent;
-    border-color: var(--border);
-    color: var(--text);
-  }
-  .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
-
-  /* --- Log / Output --- */
-  .log-wrap { margin-top: 20px; }
-  .log-wrap label { margin-bottom: 8px; }
-  .log {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    line-height: 1.7;
-    max-height: 220px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    color: var(--muted);
-  }
-  .log .ok  { color: var(--success); }
-  .log .err { color: var(--error); }
-  .log .hi  { color: var(--accent2); }
-
-  /* --- Result files --- */
-  .result-list {
-    list-style: none;
-    margin-top: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .result-list li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px 12px;
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    gap: 10px;
-  }
-  .result-list li .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .result-list li a {
-    color: var(--accent2);
-    font-size: 12px;
-    text-decoration: none;
-    border: 1px solid var(--accent2);
-    border-radius: 4px;
-    padding: 2px 8px;
-    white-space: nowrap;
-    transition: background .15s;
-  }
-  .result-list li a:hover { background: rgba(78,168,222,.12); }
-
-  /* --- Status badge --- */
-  .status {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-family: 'DM Mono', monospace;
-    margin-left: 12px;
-  }
-  .status.loading { background: rgba(232,197,71,.15); color: var(--accent); }
-  .status.ready   { background: rgba(76,175,80,.15);  color: var(--success); }
-  .status.error   { background: rgba(244,67,54,.15);  color: var(--error); }
-
-  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
-
-  /* --- Scrollbar --- */
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#contextMenu {
+  position: fixed; display: none; background: #fff;
+  border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  z-index: 1000; font-size: 13px;
+}
+#contextMenu ul { list-style: none; margin: 0; padding: 4px 0; }
+#contextMenu li { padding: 4px 16px; cursor: pointer; }
+#contextMenu li:hover { background: #e6f2ff; }
 </style>
 </head>
 <body>
 
-<header>
-<div class="logo" style="display:inline">7z<span>-wasm </span></div>
-
-<span><div class="logo2"><a href="https://github.com/use-strict/7z-wasm">https://github.com/use-strict/7z-wasm</a></div></span>
-
-<p>
-7-Zip running entirely in your browser via WebAssembly &nbsp;·&nbsp; no server needed.<br>
-This version is dated March 2026.
-</p>
-
-</header>
-
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('compress')">📦 Compress</button>
-  <button class="tab"        onclick="switchTab('extract')">📂 Extract</button>
+<div class="toolbar">
+  <div>
+    アーカイブ: <input type="file" id="file">
+  </div>
+  <button id="downloadZip">すべて ZIP ダウンロード</button>
 </div>
 
-<!-- ========== COMPRESS PANEL ========== -->
-<div class="panel active" id="panel-compress">
-
-  <div class="dropzone" id="dz-compress"
-       ondragover="dzOver(event,'dz-compress')"
-       ondragleave="dzLeave('dz-compress')"
-       ondrop="dzDrop(event,'compress')">
-    <input type="file" id="input-compress" multiple onchange="addFiles(event,'compress')">
-    <span class="dz-icon">🗂️</span>
-    <p><strong>Drop files here</strong> or click to browse</p>
-    <p>Any file type - all will be packed into a .zip archive</p>
-  </div>
-
-  <ul class="file-list" id="list-compress"></ul>
-
-  <div class="field">
-    <label for="arc-name">Archive name</label>
-    <input type="text" id="arc-name" value="archive.zip" placeholder="archive.zip">
-  </div>
-
-  <div class="row">
-    <button class="btn btn-primary" id="btn-compress" onclick="runCompress()" disabled>
-      ⚡ Create archive
-    </button>
-    <span id="engine-status" class="status loading">loading wasm…</span>
-  </div>
-
-  <div class="log-wrap" id="compress-result" style="display:none">
-    <label>Output</label>
-    <div class="log" id="compress-log"></div>
-    <div id="compress-dl" style="margin-top:12px"></div>
+<div class="explorer">
+  <div class="tree" id="tree"></div>
+  <div class="content">
+    <div id="fileList"></div>
+    <div id="preview"></div>
   </div>
 </div>
 
-<!-- ========== EXTRACT PANEL ========== -->
-<div class="panel" id="panel-extract">
-
-  <div class="dropzone" id="dz-extract"
-       ondragover="dzOver(event,'dz-extract')"
-       ondragleave="dzLeave('dz-extract')"
-       ondrop="dzDrop(event,'extract')">
-    <input type="file" id="input-extract" accept=".7z,.zip,.tar,.gz,.bz2,.xz,.rar,.zst"
-           onchange="loadArchive(event)">
-    <span class="dz-icon">🗜️</span>
-    <p><strong>Drop an archive here</strong> or click to browse</p>
-    <p>Supports .7z .zip .tar .gz .bz2 .xz .rar .zst and more</p>
-  </div>
-
-  <div class="row">
-    <button class="btn btn-primary" id="btn-extract" onclick="runExtract()" disabled>
-      📂 Extract all files
-    </button>
-    <button class="btn btn-secondary" id="btn-list" onclick="runList()" disabled>
-      📋 List contents
-    </button>
-  </div>
-
-  <div class="log-wrap" id="extract-result" style="display:none">
-    <label>Output</label>
-    <div class="log" id="extract-log"></div>
-    <ul class="result-list" id="extract-files"></ul>
-  </div>
+<div id="contextMenu">
+  <ul>
+    <li data-action="preview">プレビュー</li>
+    <li data-action="download">ダウンロード</li>
+    <li data-action="copyPath">パスをコピー</li>
+  </ul>
 </div>
 
+<script type="module">
+import * as SevenZip from "./7zz.umd.js";
 
-<script>
-/* ---------------------------------------------
-   7z-wasm Browser Demo
-   Required files (loaded from unpkg CDN):
-     • 7zz.umd.js  – loaded in <head> via <script src>
-     • 7zz.wasm    – fetched automatically via locateFile()
-   --------------------------------------------- */
+let seven = null;
+let entries = [];
+let folderTree = {};
+let currentContextEntry = null;
 
-let sz = null;           // SevenZip instance (shared)
-let compressFiles = [];  // { name, data: Uint8Array }
-let extractFile   = null; // { name, data: Uint8Array }
+document.getElementById("file").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (file) loadArchive(file);
+});
 
-// -- Init: load SevenZip with correct WASM path --
-(async () => {
-  try {
-    sz = await SevenZip({
-      // Tell emscripten where to fetch the .wasm file.
-      // When using unpkg, the wasm lives next to the JS file.
-      locateFile: (path, scriptDir) => {
-        if (path.endsWith('.wasm'))
-          return '7zz.wasm';	// https://unpkg.com/7z-wasm/7zz.wasm 
-        return scriptDir + path;
-      },
-      // Capture stdout/stderr for the log
-      print:    (msg) => logLine(activeLog(), msg, ''),
-      printErr: (msg) => logLine(activeLog(), msg, 'err'),
-    });
+async function loadArchive(file){
+  entries = [];
+  folderTree = {};
+  document.getElementById("tree").textContent = "読み込み中…";
 
-    document.getElementById('engine-status').textContent = '✓ ready';
-    document.getElementById('engine-status').className   = 'status ready';
-    document.getElementById('btn-compress').disabled = compressFiles.length === 0;
-  } catch (e) {
-    document.getElementById('engine-status').textContent = '✗ failed';
-    document.getElementById('engine-status').className   = 'status error';
-    console.error(e);
-  }
-})();
+  seven = await SevenZip.create7z();
 
-// -- Tab switching --
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) =>
-    t.classList.toggle('active', i === (name === 'compress' ? 0 : 1)));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('panel-' + name).classList.add('active');
-}
+  const buf = new Uint8Array(await file.arrayBuffer());
 
-// -- Drag & drop helpers --
-function dzOver(e, id) {
-  e.preventDefault();
-  document.getElementById(id).classList.add('drag-over');
-}
-function dzLeave(id) {
-  document.getElementById(id).classList.remove('drag-over');
-}
-function dzDrop(e, mode) {
-  e.preventDefault();
-  dzLeave('dz-' + mode);
-  const files = [...e.dataTransfer.files];
-  if (mode === 'compress') addFilesRaw(files);
-  else loadArchiveRaw(files[0]);
-}
+  // ★ list でファイル一覧を取得
+  const list = await seven.list(buf);
 
-// -- Compress: file handling --
-function addFiles(event, mode) {
-  addFilesRaw([...event.target.files]);
-}
-async function addFilesRaw(files) {
-  for (const f of files) {
-    const buf = await f.arrayBuffer();
-    compressFiles.push({ name: f.name, data: new Uint8Array(buf), size: f.size });
-  }
-  renderCompressList();
-}
-function removeFile(idx) {
-  compressFiles.splice(idx, 1);
-  renderCompressList();
-}
-function renderCompressList() {
-  const ul = document.getElementById('list-compress');
-  ul.innerHTML = compressFiles.map((f, i) => `
-    <li>
-      <span class="fname">${esc(f.name)}</span>
-      <span class="fsize">${fmtSize(f.size)}</span>
-      <button class="rm" onclick="removeFile(${i})" title="Remove">×</button>
-    </li>`).join('');
-  if (sz) document.getElementById('btn-compress').disabled = compressFiles.length === 0;
-}
-
-// -- COMPRESS --
-async function runCompress() {
-  if (!sz || compressFiles.length === 0) return;
-
-  const arcName = document.getElementById('arc-name').value.trim() || 'archive.zip';
-  const logEl   = document.getElementById('compress-log');
-  const resultEl = document.getElementById('compress-result');
-
-  resultEl.style.display = 'block';
-  logEl.innerHTML = '';
-  document.getElementById('compress-dl').innerHTML = '';
-  document.getElementById('btn-compress').disabled = true;
-
-  // Clean up any previous run
-  cleanFS([arcName, ...compressFiles.map(f => f.name)]);
-
-  // Write each input file into emscripten FS
-  for (const f of compressFiles) {
-    sz.FS.writeFile(f.name, f.data);
-    logLine(logEl, `→ wrote ${f.name} (${fmtSize(f.size)})`, 'hi');
+  // list.entries = [{path, size, ...}]
+  for(const item of list.entries){
+    const data = await seven.extract(buf, item.path);
+    const blob = new Blob([data]);
+    entries.push({ path: item.path, file: blob });
   }
 
-  // Run: 7z a <archive> <files…>
-  sz.callMain(['a', arcName, ...compressFiles.map(f => f.name)]);
-
-  // Read back the archive
-  try {
-    const outData = sz.FS.readFile(arcName);
-    logLine(logEl, `✓ archive created: ${arcName} (${fmtSize(outData.length)})`, 'ok');
-
-    const blob = new Blob([outData], { type: 'application/x-7z-compressed' });
-    const url  = URL.createObjectURL(blob);
-    document.getElementById('compress-dl').innerHTML =
-      `<a class="btn btn-secondary" href="${url}" download="${esc(arcName)}">⬇ Download ${esc(arcName)}</a>`;
-
-    // Clean up FS
-    cleanFS([arcName, ...compressFiles.map(f => f.name)]);
-  } catch (e) {
-    logLine(logEl, '✗ Could not read output archive. Check log above.', 'err');
-  }
-
-  document.getElementById('btn-compress').disabled = false;
+  buildTree();
+  renderTree();
+  document.getElementById("fileList").textContent = "フォルダを選択してください。";
 }
 
-// -- Extract: file handling --
-function loadArchive(event) {
-  loadArchiveRaw(event.target.files[0]);
-}
-async function loadArchiveRaw(file) {
-  if (!file) return;
-  const buf = await file.arrayBuffer();
-  extractFile = { name: file.name, data: new Uint8Array(buf) };
-
-  // Show name on dropzone
-  document.querySelector('#dz-extract p strong').textContent = file.name;
-  document.querySelector('#dz-extract p:last-child').textContent = fmtSize(file.size);
-
-  document.getElementById('btn-extract').disabled = !sz;
-  document.getElementById('btn-list').disabled    = !sz;
-}
-
-// -- LIST --
-function runList() {
-  if (!sz || !extractFile) return;
-  const logEl   = document.getElementById('extract-log');
-  const resultEl = document.getElementById('extract-result');
-  resultEl.style.display = 'block';
-  logEl.innerHTML = '';
-  document.getElementById('extract-files').innerHTML = '';
-
-  cleanFS([extractFile.name]);
-  sz.FS.writeFile(extractFile.name, extractFile.data);
-  sz.callMain(['l', extractFile.name]);
-  cleanFS([extractFile.name]);
-}
-
-// -- EXTRACT --
-function runExtract() {
-  if (!sz || !extractFile) return;
-  const logEl    = document.getElementById('extract-log');
-  const filesEl  = document.getElementById('extract-files');
-  const resultEl = document.getElementById('extract-result');
-
-  resultEl.style.display = 'block';
-  logEl.innerHTML  = '';
-  filesEl.innerHTML = '';
-  document.getElementById('btn-extract').disabled = true;
-  document.getElementById('btn-list').disabled    = true;
-
-  cleanFS([extractFile.name]);
-  sz.FS.writeFile(extractFile.name, extractFile.data);
-
-  // Collect files created by extraction
-  const beforeFiles = listAllFiles('/');
-  sz.callMain(['x', extractFile.name, '-y']);
-  const afterFiles  = listAllFiles('/');
-
-  // Diff: new files
-  const created = afterFiles.filter(f => !beforeFiles.includes(f) && f !== '/' + extractFile.name);
-
-  if (created.length === 0) {
-    logLine(logEl, 'No files extracted (or they landed in unexpected paths).', 'err');
-  } else {
-    logLine(logEl, `✓ Extracted ${created.length} file(s)`, 'ok');
-    filesEl.innerHTML = created.map(path => {
-      try {
-        const data = sz.FS.readFile(path);
-        const blob = new Blob([data]);
-        const url  = URL.createObjectURL(blob);
-        const fname = path.split('/').pop();
-        return `<li>
-          <span class="fname">${esc(fname)}</span>
-          <span class="fsize" style="color:var(--muted)">${fmtSize(data.length)}</span>
-          <a href="${url}" download="${esc(fname)}">⬇ save</a>
-        </li>`;
-      } catch { return ''; }
-    }).join('');
-  }
-
-  cleanFS([extractFile.name, ...created]);
-  document.getElementById('btn-extract').disabled = false;
-  document.getElementById('btn-list').disabled    = false;
-}
-
-// -- Helpers --
-function activeLog() {
-  return document.querySelector('.panel.active .log') || document.getElementById('compress-log');
-}
-
-function logLine(el, msg, cls) {
-  if (!el) return;
-  const line = document.createElement('span');
-  if (cls) line.className = cls;
-  line.textContent = msg + '\n';
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
-
-function cleanFS(names) {
-  for (const name of names) {
-    try { sz.FS.unlink(name); } catch (_) {}
-    try { sz.FS.unlink('/' + name); } catch (_) {}
-  }
-}
-
-function listAllFiles(dir) {
-  let result = [];
-  try {
-    const entries = sz.FS.readdir(dir);
-    for (const e of entries) {
-      if (e === '.' || e === '..') continue;
-      const full = dir === '/' ? '/' + e : dir + '/' + e;
-      try {
-        const stat = sz.FS.stat(full);
-        if (sz.FS.isDir(stat.mode)) result = result.concat(listAllFiles(full));
-        else result.push(full);
-      } catch (_) {}
+function buildTree(){
+  folderTree = {};
+  for(const entry of entries){
+    const parts = entry.path.split("/");
+    let node = folderTree;
+    for(let i=0;i<parts.length;i++){
+      const p = parts[i];
+      if(!node[p]) node[p] = { __files: [], __folders: {} };
+      if(i === parts.length - 1){
+        node[p].__files.push(entry);
+      } else {
+        node = node[p].__folders;
+      }
     }
-  } catch (_) {}
-  return result;
+  }
 }
 
-function fmtSize(n) {
-  if (n < 1024) return n + ' B';
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-  return (n / 1024 / 1024).toFixed(2) + ' MB';
+function renderTree(){
+  const tree = document.getElementById("tree");
+  tree.innerHTML = "";
+  const ul = document.createElement("ul");
+  for(const name in folderTree){
+    ul.appendChild(createFolderNode(name, folderTree[name]));
+  }
+  tree.appendChild(ul);
 }
 
-function esc(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function createFolderNode(name, node){
+  const li = document.createElement("li");
+  li.textContent = "📁 " + name;
+  li.onclick = e => {
+    e.stopPropagation();
+    showFolder(node);
+  };
+  const sub = node.__folders;
+  if(Object.keys(sub).length){
+    const ul = document.createElement("ul");
+    for(const s in sub){
+      ul.appendChild(createFolderNode(s, sub[s]));
+    }
+    li.appendChild(ul);
+  }
+  return li;
 }
+
+function showFolder(folder){
+  const list = document.getElementById("fileList");
+  list.innerHTML = "";
+  document.getElementById("preview").innerHTML = "";
+
+  folder.__files.forEach(entry => {
+    const div = document.createElement("div");
+    div.className = "file-item";
+
+    const icon = document.createElement("span");
+    icon.className = "icon";
+    icon.textContent = getIcon(entry);
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "name";
+    nameSpan.textContent = entry.path.split("/").pop();
+
+    const dl = document.createElement("a");
+    dl.className = "download-link";
+    dl.textContent = "⬇";
+    dl.href = URL.createObjectURL(entry.file);
+    dl.download = entry.path.split("/").pop();
+
+    div.appendChild(icon);
+    div.appendChild(nameSpan);
+    div.appendChild(dl);
+
+    div.onclick = () => previewFile(entry);
+
+    div.oncontextmenu = e => {
+      e.preventDefault();
+      currentContextEntry = entry;
+      showContextMenu(e.clientX, e.clientY);
+    };
+
+    list.appendChild(div);
+  });
+}
+
+function getIcon(entry){
+  const name = entry.path.toLowerCase();
+  if(name.match(/\.(png|jpg|jpeg|gif|webp)$/)) return "🖼";
+  if(name.match(/\.(txt|html|css|js)$/)) return "📄";
+  return "📃";
+}
+
+function previewFile(entry){
+  const preview = document.getElementById("preview");
+  preview.textContent = "読み込み中…";
+
+  const name = entry.path.toLowerCase();
+
+  if(name.match(/\.(png|jpg|jpeg|gif|webp)$/)){
+    preview.innerHTML = `<img src="${URL.createObjectURL(entry.file)}" style="max-width:100%;">`;
+    return;
+  }
+
+  if(name.match(/\.(txt|html|css|js)$/)){
+    const reader = new FileReader();
+    reader.onload = ({target}) => {
+      const bytes = new Uint8Array(target.result);
+      const detected = Encoding.detect(bytes);
+      const utf8 = Encoding.convert(bytes, {to:"UNICODE", from:detected, type:"string"});
+      preview.innerHTML = `<pre>${escapeHtml(utf8)}</pre>`;
+    };
+    reader.readAsArrayBuffer(entry.file);
+    return;
+  }
+
+  preview.textContent = "プレビュー非対応のファイルです。";
+}
+
+function escapeHtml(str){
+  return str.replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function showContextMenu(x,y){
+  const menu = document.getElementById("contextMenu");
+  menu.style.left = x+"px";
+  menu.style.top = y+"px";
+  menu.style.display = "block";
+}
+
+document.addEventListener("click", () => {
+  document.getElementById("contextMenu").style.display = "none";
+});
+
+document.getElementById("contextMenu").onclick = e => {
+  const li = e.target.closest("li");
+  if(!li || !currentContextEntry) return;
+
+  const action = li.dataset.action;
+
+  if(action === "preview"){
+    previewFile(currentContextEntry);
+  } else if(action === "download"){
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(currentContextEntry.file);
+    a.download = currentContextEntry.path.split("/").pop();
+    a.click();
+  } else if(action === "copyPath"){
+    navigator.clipboard?.writeText(currentContextEntry.path);
+  }
+
+  document.getElementById("contextMenu").style.display = "none";
+};
+
+document.getElementById("downloadZip").onclick = async () => {
+  if(entries.length === 0){
+    alert("まだ読み込まれていません");
+    return;
+  }
+  const zip = new JSZip();
+  for(const entry of entries){
+    const buf = await entry.file.arrayBuffer();
+    zip.file(entry.path, buf);
+  }
+  const blob = await zip.generateAsync({type:"blob"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "extracted.zip";
+  a.click();
+};
 </script>
+
 </body>
 </html>
