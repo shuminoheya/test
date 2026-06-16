@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>7zip Explorer (7z-wasm 最終版)</title>
+<title>7zip Explorer (7z-wasm 完全版)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
 <script src="7zz.umd.js"></script>
@@ -69,7 +69,7 @@ li:hover { background: #eee; }
       <option value="zip">ZIP</option>
       <option value="7z">7z</option>
     </select>
-    <button id="btnCompress">選択ファイルを圧縮</button>
+    <button id="btnCompress">展開した内容を圧縮</button>
   </div>
 </div>
 
@@ -116,10 +116,13 @@ async function loadArchive(file){
 
   const buf = new Uint8Array(await file.arrayBuffer());
 
-  cleanFS();
+  cleanFSAll();
 
   sz.FS.writeFile(file.name, buf);
   sz.callMain(["x", file.name, "-y"]);
+
+  // 元アーカイブは FS から削除
+  try { sz.FS.unlink("/" + file.name); } catch {}
 
   const paths = listAllFiles("/");
 
@@ -146,6 +149,7 @@ function normalizePath(p){
   return ("/" + p).replace(/\/+/g, "/");
 }
 
+// 仮想 FS の dev/home/proc/tmp は残しつつ、それ以外を走査
 function listAllFiles(dir){
   let result = [];
   let entriesFS;
@@ -170,6 +174,10 @@ function listAllFiles(dir){
     }
 
     if (sz.FS.isDir(stat.mode)){
+      // 仮想ディレクトリはスキップ
+      if (full === "/dev" || full === "/proc" || full === "/home" || full === "/tmp") {
+        continue;
+      }
       result = result.concat(listAllFiles(full));
     } else {
       result.push(full);
@@ -178,7 +186,8 @@ function listAllFiles(dir){
   return result;
 }
 
-function cleanFS(){
+// 仮想 FS から展開物だけ削除（dev/home/proc/tmp は残す）
+function cleanFSAll(){
   try {
     const all = listAllFiles("/");
     for (const f of all){
@@ -350,15 +359,18 @@ document.getElementById("btnCompress").onclick = async () => {
   const type = document.getElementById("compressType").value;
   const outName = type === "zip" ? "archive.zip" : "archive.7z";
 
-  cleanFS();
+  cleanFSAll();
 
+  // 展開した内容だけを書き戻す
   for(const entry of entries){
     const buf = new Uint8Array(await entry.file.arrayBuffer());
     ensureDir(entry.path);
     sz.FS.writeFile(normalizePath(entry.path), buf);
   }
 
-  sz.callMain(["a", outName, "."]);
+  // entries だけを圧縮対象にする
+  const targets = entries.map(e => normalizePath(e.path));
+  sz.callMain(["a", outName, ...targets]);
 
   const out = sz.FS.readFile(outName);
   const blob = new Blob([out]);
