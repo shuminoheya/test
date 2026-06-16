@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>7zip Explorer (7zz版)</title>
+<title>7zip Explorer 統合版</title>
 
 <!-- 文字コード判定 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
@@ -52,15 +52,27 @@ li:hover { background: #eee; }
 #contextMenu ul { list-style: none; margin: 0; padding: 4px 0; }
 #contextMenu li { padding: 4px 16px; cursor: pointer; }
 #contextMenu li:hover { background: #e6f2ff; }
+
+.compress-box {
+  display: flex; align-items: center; gap: 8px;
+}
 </style>
 </head>
 <body>
 
 <div class="toolbar">
   <div>
-    アーカイブ: <input type="file" id="file">
+    展開: <input type="file" id="file">
   </div>
-  <button id="downloadZip">すべて ZIP ダウンロード</button>
+
+  <div class="compress-box">
+    圧縮形式:
+    <select id="compressType">
+      <option value="zip">ZIP</option>
+      <option value="7z">7z</option>
+    </select>
+    <button id="btnCompress">選択ファイルを圧縮</button>
+  </div>
 </div>
 
 <div class="explorer">
@@ -79,14 +91,38 @@ li:hover { background: #eee; }
   </ul>
 </div>
 
+<script src="7zz.umd.js"></script>
 <script type="module">
-import * as SevenZip from "./7zz.umd.js";
 
-let seven = null;
+let sz = null;
 let entries = [];
 let folderTree = {};
 let currentContextEntry = null;
 
+// -----------------------------
+// 7zz 初期化（あなたのコードそのまま）
+// -----------------------------
+(async () => {
+  try {
+    sz = await SevenZip({
+      locateFile: (path, scriptDir) => {
+        if (path.endsWith('.wasm'))
+          return '7zz.wasm';
+        return scriptDir + path;
+      },
+      print:    (msg) => console.log(msg),
+      printErr: (msg) => console.error(msg),
+    });
+
+    console.log("7zz ready");
+  } catch (e) {
+    console.error("7zz load failed", e);
+  }
+})();
+
+// -----------------------------
+// 展開（Extract）
+// -----------------------------
 document.getElementById("file").addEventListener("change", e => {
   const file = e.target.files[0];
   if (file) loadArchive(file);
@@ -97,16 +133,14 @@ async function loadArchive(file){
   folderTree = {};
   document.getElementById("tree").textContent = "読み込み中…";
 
-  seven = await SevenZip.create7z();
-
   const buf = new Uint8Array(await file.arrayBuffer());
 
-  // ★ list でファイル一覧を取得
-  const list = await seven.list(buf);
+  // list
+  const list = await sz.list(buf);
 
-  // ★ extract で Uint8Array を取り出し Blob に変換
+  // extract
   for(const item of list.entries){
-    const data = await seven.extract(buf, item.path);
+    const data = await sz.extract(buf, item.path);
     const blob = new Blob([data]);
     entries.push({ path: item.path, file: blob });
   }
@@ -116,6 +150,9 @@ async function loadArchive(file){
   document.getElementById("fileList").textContent = "フォルダを選択してください。";
 }
 
+// -----------------------------
+// フォルダツリー構築
+// -----------------------------
 function buildTree(){
   folderTree = {};
   for(const entry of entries){
@@ -161,6 +198,9 @@ function createFolderNode(name, node){
   return li;
 }
 
+// -----------------------------
+// ファイル一覧
+// -----------------------------
 function showFolder(folder){
   const list = document.getElementById("fileList");
   list.innerHTML = "";
@@ -207,6 +247,9 @@ function getIcon(entry){
   return "📃";
 }
 
+// -----------------------------
+// プレビュー
+// -----------------------------
 function previewFile(entry){
   const preview = document.getElementById("preview");
   preview.textContent = "読み込み中…";
@@ -239,6 +282,9 @@ function escapeHtml(str){
   }[c]));
 }
 
+// -----------------------------
+// 右クリックメニュー
+// -----------------------------
 function showContextMenu(x,y){
   const menu = document.getElementById("contextMenu");
   menu.style.left = x+"px";
@@ -270,23 +316,43 @@ document.getElementById("contextMenu").onclick = e => {
   document.getElementById("contextMenu").style.display = "none";
 };
 
-document.getElementById("downloadZip").onclick = async () => {
+// -----------------------------
+// 圧縮（ZIP / 7z）
+// -----------------------------
+document.getElementById("btnCompress").onclick = async () => {
   if(entries.length === 0){
-    alert("まだ読み込まれていません");
+    alert("展開済みファイルがありません");
     return;
   }
-  const zip = new JSZip();
+
+  const type = document.getElementById("compressType").value;
+  const outName = type === "zip" ? "archive.zip" : "archive.7z";
+
+  // FS をクリーン
+  try { sz.FS.unlink(outName); } catch {}
+
+  // 展開済みファイルを FS に書く
   for(const entry of entries){
-    const buf = await entry.file.arrayBuffer();
-    zip.file(entry.path, buf);
+    const buf = new Uint8Array(await entry.file.arrayBuffer());
+    sz.FS.writeFile(entry.path, buf);
   }
-  const blob = await zip.generateAsync({type:"blob"});
+
+  // 圧縮コマンド
+  sz.callMain(["a", outName, ...entries.map(e => e.path)]);
+
+  // 読み出し
+  const out = sz.FS.readFile(outName);
+  const blob = new Blob([out]);
+  const url = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "extracted.zip";
+  a.href = url;
+  a.download = outName;
   a.click();
 };
+
 </script>
 
 </body>
 </html>
+
