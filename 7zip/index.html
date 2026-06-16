@@ -2,13 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>7zip Explorer (7z-wasm CLI 完全版)</title>
+<title>7zip Explorer (7z-wasm 最終版)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
 <script src="7zz.umd.js"></script>
 
 <style>
-/* --- UI はあなたの元コードそのまま --- */
 body { margin: 0; font-family: system-ui, sans-serif; }
 .toolbar {
   display: flex; justify-content: space-between; align-items: center;
@@ -91,10 +90,10 @@ li:hover { background: #eee; }
 </div>
 
 <script>
-/* -----------------------------
-   SevenZip 初期化
------------------------------ */
 let sz = null;
+let entries = [];
+let folderTree = {};
+let currentContextEntry = null;
 
 (async () => {
   sz = await SevenZip({
@@ -105,16 +104,6 @@ let sz = null;
   console.log("7z-wasm ready");
 })();
 
-/* -----------------------------
-   Explorer 用データ
------------------------------ */
-let entries = [];
-let folderTree = {};
-let currentContextEntry = null;
-
-/* -----------------------------
-   アーカイブ読み込み
------------------------------ */
 document.getElementById("file").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (file) await loadArchive(file);
@@ -127,20 +116,20 @@ async function loadArchive(file){
 
   const buf = new Uint8Array(await file.arrayBuffer());
 
-  // FS をクリーン
   cleanFS();
 
-  // アーカイブを書き込み
   sz.FS.writeFile(file.name, buf);
-
-  // 展開
   sz.callMain(["x", file.name, "-y"]);
 
-  // FS からファイル一覧を取得
   const paths = listAllFiles("/");
 
   for (const path of paths) {
-    const data = sz.FS.readFile(path);
+    let data;
+    try {
+      data = sz.FS.readFile(path);
+    } catch {
+      continue;
+    }
     const blob = new Blob([data]);
     entries.push({
       path: path.replace(/^\//, ""),
@@ -153,16 +142,33 @@ async function loadArchive(file){
   document.getElementById("fileList").textContent = "フォルダを選択してください。";
 }
 
-/* -----------------------------
-   FS 再帰走査
------------------------------ */
+function normalizePath(p){
+  return ("/" + p).replace(/\/+/g, "/");
+}
+
 function listAllFiles(dir){
   let result = [];
-  const items = sz.FS.readdir(dir);
-  for (const item of items){
-    if (item === "." || item === "..") continue;
-    const full = dir === "/" ? "/" + item : dir + "/" + item;
-    const stat = sz.FS.stat(full);
+  let entriesFS;
+  dir = normalizePath(dir);
+
+  try {
+    entriesFS = sz.FS.readdir(dir);
+  } catch {
+    return result;
+  }
+
+  for (const e of entriesFS){
+    if (e === "." || e === "..") continue;
+
+    const full = normalizePath(dir + "/" + e);
+
+    let stat;
+    try {
+      stat = sz.FS.stat(full);
+    } catch {
+      continue;
+    }
+
     if (sz.FS.isDir(stat.mode)){
       result = result.concat(listAllFiles(full));
     } else {
@@ -174,16 +180,13 @@ function listAllFiles(dir){
 
 function cleanFS(){
   try {
-    const root = listAllFiles("/");
-    for (const f of root){
+    const all = listAllFiles("/");
+    for (const f of all){
       try { sz.FS.unlink(f); } catch {}
     }
   } catch {}
 }
 
-/* -----------------------------
-   フォルダツリー構築
------------------------------ */
 function buildTree(){
   folderTree = {};
   for(const entry of entries){
@@ -229,9 +232,6 @@ function createFolderNode(name, node){
   return li;
 }
 
-/* -----------------------------
-   ファイル一覧
------------------------------ */
 function showFolder(folder){
   const list = document.getElementById("fileList");
   list.innerHTML = "";
@@ -278,9 +278,6 @@ function getIcon(entry){
   return "📃";
 }
 
-/* -----------------------------
-   プレビュー
------------------------------ */
 function previewFile(entry){
   const preview = document.getElementById("preview");
   preview.textContent = "読み込み中…";
@@ -313,9 +310,6 @@ function escapeHtml(str){
   }[c]));
 }
 
-/* -----------------------------
-   右クリックメニュー
------------------------------ */
 function showContextMenu(x,y){
   const menu = document.getElementById("contextMenu");
   menu.style.left = x+"px";
@@ -347,9 +341,6 @@ document.getElementById("contextMenu").onclick = e => {
   document.getElementById("contextMenu").style.display = "none";
 };
 
-/* -----------------------------
-   圧縮（CLI 版）
------------------------------ */
 document.getElementById("btnCompress").onclick = async () => {
   if(entries.length === 0){
     alert("展開済みファイルがありません");
@@ -361,17 +352,14 @@ document.getElementById("btnCompress").onclick = async () => {
 
   cleanFS();
 
-  // FS に書き込み
   for(const entry of entries){
     const buf = new Uint8Array(await entry.file.arrayBuffer());
     ensureDir(entry.path);
-    sz.FS.writeFile(entry.path, buf);
+    sz.FS.writeFile(normalizePath(entry.path), buf);
   }
 
-  // 圧縮
   sz.callMain(["a", outName, "."]);
 
-  // 読み出し
   const out = sz.FS.readFile(outName);
   const blob = new Blob([out]);
   const url = URL.createObjectURL(blob);
@@ -387,7 +375,8 @@ function ensureDir(path){
   let current = "";
   for(let i=0;i<parts.length - 1;i++){
     current += "/" + parts[i];
-    try { sz.FS.mkdir(current); } catch {}
+    const norm = normalizePath(current);
+    try { sz.FS.mkdir(norm); } catch {}
   }
 }
 </script>
