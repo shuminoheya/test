@@ -2,9 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>7zip Explorer (LZH日本語修正・完全版)</title>
+<title>7zip Explorer (フル構成・LZH日本語対応)</title>
 
+<!-- 文字コード変換ライブラリ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
+<!-- 7z-wasm 本体（同じフォルダに 7zz.umd.js / 7zz.wasm を置く） -->
 <script src="7zz.umd.js"></script>
 
 <style>
@@ -90,20 +92,22 @@ li:hover { background: #eee; }
 </div>
 
 <script>
-let sz = null;
-let entries = [];
-let folderTree = {};
+let sz = null;              // SevenZip インスタンス
+let entries = [];           // { path, file: Blob }
+let folderTree = {};        // フォルダツリー
 let currentContextEntry = null;
 
+// 7z-wasm 初期化
 (async () => {
   sz = await SevenZip({
-    locateFile: (p) => p,
+    locateFile: (p) => p,   // 同じフォルダに 7zz.wasm を置く
     print: console.log,
     printErr: console.error
   });
   console.log("7z-wasm ready");
 })();
 
+// ファイル選択 → 展開
 document.getElementById("file").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (file) await loadArchive(file);
@@ -124,20 +128,27 @@ function fixSjisName(name) {
   }
 }
 
+// アーカイブ展開
 async function loadArchive(file){
   entries = [];
   folderTree = {};
   document.getElementById("tree").textContent = "展開中…";
+  document.getElementById("fileList").textContent = "";
+  document.getElementById("preview").textContent = "";
 
   const buf = new Uint8Array(await file.arrayBuffer());
 
+  // FS をクリーン（前回の展開物を削除）
   cleanFSAll();
 
+  // アーカイブを書き込み＆展開
   sz.FS.writeFile(file.name, buf);
   sz.callMain(["x", file.name, "-y"]);
 
+  // 元アーカイブは FS から削除
   try { sz.FS.unlink("/" + file.name); } catch {}
 
+  // 展開されたファイル一覧を取得
   const paths = listAllFiles("/");
 
   for (const path of paths) {
@@ -149,7 +160,7 @@ async function loadArchive(file){
     }
     const blob = new Blob([data]);
     const rawPath = path.replace(/^\//, "");
-    const fixedPath = fixSjisName(rawPath);
+    const fixedPath = fixSjisName(rawPath); // 日本語名修復
     entries.push({
       path: fixedPath,
       file: blob
@@ -161,10 +172,12 @@ async function loadArchive(file){
   document.getElementById("fileList").textContent = "フォルダを選択してください。";
 }
 
+// パス正規化
 function normalizePath(p){
   return ("/" + p).replace(/\/+/g, "/");
 }
 
+// FS を再帰走査（dev/home/proc/tmp はスキップ）
 function listAllFiles(dir){
   let result = [];
   let entriesFS;
@@ -200,6 +213,7 @@ function listAllFiles(dir){
   return result;
 }
 
+// 展開物だけ削除（仮想ディレクトリは残す）
 function cleanFSAll(){
   try {
     const all = listAllFiles("/");
@@ -209,6 +223,7 @@ function cleanFSAll(){
   } catch {}
 }
 
+// フォルダツリー構築
 function buildTree(){
   folderTree = {};
   for(const entry of entries){
@@ -226,6 +241,7 @@ function buildTree(){
   }
 }
 
+// フォルダツリー描画
 function renderTree(){
   const tree = document.getElementById("tree");
   tree.innerHTML = "";
@@ -254,6 +270,7 @@ function createFolderNode(name, node){
   return li;
 }
 
+// ファイル一覧表示
 function showFolder(folder){
   const list = document.getElementById("fileList");
   list.innerHTML = "";
@@ -300,6 +317,7 @@ function getIcon(entry){
   return "📃";
 }
 
+// プレビュー
 function previewFile(entry){
   const preview = document.getElementById("preview");
   preview.textContent = "読み込み中…";
@@ -332,6 +350,7 @@ function escapeHtml(str){
   }[c]));
 }
 
+// 右クリックメニュー
 function showContextMenu(x,y){
   const menu = document.getElementById("contextMenu");
   menu.style.left = x+"px";
@@ -363,6 +382,7 @@ document.getElementById("contextMenu").onclick = e => {
   document.getElementById("contextMenu").style.display = "none";
 };
 
+// 圧縮（展開した内容だけ）
 document.getElementById("btnCompress").onclick = async () => {
   if(entries.length === 0){
     alert("展開済みファイルがありません");
@@ -372,14 +392,17 @@ document.getElementById("btnCompress").onclick = async () => {
   const type = document.getElementById("compressType").value;
   const outName = type === "zip" ? "archive.zip" : "archive.7z";
 
+  // FS をクリーン
   cleanFSAll();
 
+  // 展開した内容だけを書き戻す
   for(const entry of entries){
     const buf = new Uint8Array(await entry.file.arrayBuffer());
     ensureDir(entry.path);
     sz.FS.writeFile(normalizePath(entry.path), buf);
   }
 
+  // entries だけを圧縮対象にする
   const targets = entries.map(e => normalizePath(e.path));
   sz.callMain(["a", outName, ...targets]);
 
@@ -393,6 +416,7 @@ document.getElementById("btnCompress").onclick = async () => {
   a.click();
 };
 
+// ディレクトリ作成
 function ensureDir(path){
   const parts = path.split("/");
   let current = "";
