@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <title>7zip Explorer (7zz版)</title>
 
+<!-- 文字コード判定 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
+<!-- ZIP 作成 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
@@ -102,7 +104,7 @@ async function loadArchive(file){
   // ★ list でファイル一覧を取得
   const list = await seven.list(buf);
 
-  // list.entries = [{path, size, ...}]
+  // ★ extract で Uint8Array を取り出し Blob に変換
   for(const item of list.entries){
     const data = await seven.extract(buf, item.path);
     const blob = new Blob([data]);
