@@ -1,69 +1,94 @@
-    <meta charset="UTF-8">
-
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Offline html-midi-player ZIP Download</title>
+  <title>Offline html-midi-player Project Download</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <style>
     body {
       font-family: sans-serif;
+      background: #f5f5f5;
       padding: 2rem;
-      background: #fafafa;
+      line-height: 1.6;
     }
-    .box {
-      background: white;
-      padding: 2rem;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      max-width: 600px;
+    .container {
+      max-width: 720px;
       margin: auto;
+      background: #fff;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
     }
     a.button {
       display: inline-block;
       padding: 1rem 2rem;
       background: #0078d4;
-      color: white;
+      color: #fff;
       text-decoration: none;
       border-radius: 6px;
       font-size: 1.2rem;
+      margin-top: 1rem;
+    }
+    pre {
+      background: #eee;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
     }
   </style>
 </head>
+
 <body>
+  <div class="container">
+    <h1>Offline html-midi-player Project</h1>
+    <p>
+      このページでは、<strong>完全オフラインで動作する html-midi-player プロジェクト</strong>を ZIP 形式で配布しています。
+    </p>
 
-<div class="box">
-  <h1>Offline html-midi-player</h1>
-  <p>以下の ZIP をダウンロードすると、完全オフラインで動作する html-midi-player プロジェクトが入っています。</p>
+    <p>
+      下のボタンをクリックすると <strong>project.zip</strong> をダウンロードできます。
+    </p>
 
-  <p>
-    <a class="button" href="project.zip" download>project.zip をダウンロード</a>
-  </p>
+    <p>
+      <a class="button" href="project.zip" download>project.zip をダウンロード</a>
+    </p>
 
-  <h2>ZIP の内容</h2>
+    <h2>ZIP の内容</h2>
 
-  <pre>
+<pre>
 project/
 ├── index.html
 ├── assets/
-│   ├── css/style.css
-│   └── js/index.js
+│   ├── css/
+│   │   └── style.css
+│   └── js/
+│       └── index.js
 ├── lib/
 │   ├── tone.js
 │   ├── magenta.js
 │   ├── focus-visible.js
 │   └── html-midi-player.js
-└── midi/jazz.mid
-  </pre>
+└── midi/
+    └── jazz.mid
+</pre>
 
-  <h2>使い方</h2>
-  <ol>
-    <li>ZIP を展開する</li>
-    <li>フォルダ内でローカルサーバーを起動する（例：python3 -m http.server）</li>
-    <li>ブラウザで http://localhost:8000 を開く</li>
-  </ol>
-</div>
+    <h2>使い方</h2>
+    <ol>
+      <li>ZIP を展開します。</li>
+      <li>展開したフォルダでローカルサーバーを起動します。</li>
+    </ol>
 
+    <p>例（Python）:</p>
+    <pre>python3 -m http.server 8000</pre>
+
+    <p>
+      その後、ブラウザで <strong>http://localhost:8000</strong> を開くと、  
+      完全オフラインで MIDI 再生ができます。
+    </p>
+  </div>
 </body>
 </html>
