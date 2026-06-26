@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ログインフォーム</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: system-ui, sans-serif; background:#f3f4f6; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+.box { background:#fff; padding:20px; border-radius:12px; width:340px; box-shadow:0 6px 24px rgba(0,0,0,0.1); }
+.box h2 { text-align:center; margin-bottom:1rem; }
+.box input, .box button { width:100%; padding:10px; margin:8px 0; border-radius:6px; border:1px solid #ccc; font-size:1rem; }
+.box button { background:#2563eb; color:#fff; border:none; cursor:pointer; font-weight:700; }
+.box button:hover { background:#1d4ed8; }
+.msg { text-align:center; margin-top:8px; min-height:22px; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="box">
+<h2>ログイン</h2>
+
+  <form id="loginForm" novalidate autocomplete="off">
+<input type="email" id="email" placeholder="メールアドレス" required>
+<input type="password" id="password" placeholder="パスワード" required>
+<button id="loginBtn" type="button">ログイン</button>
+    
+</form>
+  <a href="ningen.html">何もかも忘れた場合</a>
+<div class="msg" id="message"></div>
+</div>
+<script>
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const VERIFICATION_SECRET = "LOGIN-OK";
+function b64ToBytes(b64){const bin=atob(b64);const out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
+async function deriveKey(email,password,saltBytes){
+  const material=await crypto.subtle.importKey("raw",enc.encode(email+":"+password),{name:"PBKDF2"},false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:saltBytes,iterations:120000,hash:"SHA-256"},material,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+const encryptedUsers=[
+  {
+    "email": "wan",
+    "salt_b64": "CTN5QsUuuyEOT8oBDshktA==",
+    "iv_b64": "FrQZkvWNXqy5ahnH",
+    "ct_b64": "Ik4SYlX/vMD/bSKGodyHDtJRwblNOAc1"
+  },
+  {
+    "email": "kusunoki",
+    "salt_b64": "OV6f/ppFBRpyvo55LaFS7A==",
+    "iv_b64": "xJKMRaKOk6APa4VV",
+    "ct_b64": "Zx80hUiaTblZXwsmCnR51G92FVVssf9z"
+  },
+  {
+    "email": "naoto",
+    "salt_b64": "VXhh2kd35AvaXz4yRyTtUw==",
+    "iv_b64": "x+3XrO55008pPssU",
+    "ct_b64": "bzWi7MM0oe37PsH/D9q7o201VqcO8yEz"
+  },
+  {
+    "email": "iwasakisyouta",
+    "salt_b64": "ltt71JMogvffHcASsw847g==",
+    "iv_b64": "oeSJimSKBa/wxTNX",
+    "ct_b64": "sbpQXyNfwN7UMD4ZdYLyLWpVjpMU6P8N"
+  },
+  {
+    "email": "katagiri",
+    "salt_b64": "x5gBadNXYkq8mGUSrUPNNw==",
+    "iv_b64": "CIxHconEgyH8rNA/",
+    "ct_b64": "H0O2sTa6/STjYpPFN3OBNQ6RIOpgraZ0"
+  }
+];
+function setLoginCache(email,ttlHours=3){
+  const expiresAt=Date.now()+ttlHours*60*60*1000;
+  localStorage.setItem("harutyan-login",JSON.stringify({email,expiresAt}));
+}
+function getLoginCache(){
+  const raw=localStorage.getItem("harutyan-login");
+  if(!raw)return null;
+  try{const data=JSON.parse(raw);if(Date.now()>data.expiresAt){localStorage.removeItem("harutyan-login");return null;}return data.email;}catch{return null;}
+}
+function showMessage(text,color="#222"){const msg=document.getElementById("message");msg.style.color=color;msg.textContent=text;}
+async function tryLogin(emailInput,passwordInput){
+  const record=encryptedUsers.find(u=>u.email===emailInput);
+  if(!record){showMessage("該当メールが登録されていません","red");return false;}
+  const salt=b64ToBytes(record.salt_b64);const iv=b64ToBytes(record.iv_b64);const ct=b64ToBytes(record.ct_b64);
+  try {
+    const key = await deriveKey(emailInput, passwordInput, salt);
+    const ptBytes = new Uint8Array(
+      await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct)
+    );
+    const text = dec.decode(ptBytes);
+    return text === VERIFICATION_SECRET;
+  } catch {
+    return false;
+  }
+}
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  if (!email || !password) {
+    showMessage("メールとパスワードを入力してください", "red");
+    return;
+  }
+  showMessage("認証中…", "#666");
+  try {
+    const ok = await tryLogin(email, password);
+    if (ok) {
+      setLoginCache(email, 3); // 3時間有効
+      showMessage("ログイン成功: " + email, "green");
+    } else {
+      showMessage("メールアドレスまたはパスワードが違います", "red");
+    }
+  } catch (e) {
+    console.error(e);
+    showMessage("認証処理でエラーが発生しました", "red");
+  }
+});
+</script>
+</body>
+</html>
