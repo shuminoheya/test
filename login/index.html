@@ -1,0 +1,37 @@
+
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ログインフォーム（GitHub API版）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: system-ui, sans-serif; background:#f3f4f6; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+.box { background:#fff; padding:20px; border-radius:12px; width:340px; box-shadow:0 6px 24px rgba(0,0,0,0.1); }
+.box h2 { text-align:center; margin-bottom:1rem; }
+.box input, .box button { width:100%; padding:10px; margin:8px 0; border-radius:6px; border:1px solid #ccc; font-size:1rem; }
+.box button { background:#2563eb; color:#fff; border:none; cursor:pointer; font-weight:700; }
+.box button:hover { background:#1d4ed8; }
+.msg { text-align:center; margin-top:8px; min-height:22px; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="box">
+<h2>ログイン</h2>
+<form id="loginForm" novalidate autocomplete="off">
+<input type="text" id="email" placeholder="ユーザー名" required>
+<input type="password" id="password" placeholder="パスワード" required>
+<button id="loginBtn" type="button">ログイン</button>
+</form>
+<div class="msg" id="message"></div>
+</div>
+
+<script>
+const TOKEN = "wanwanwan";
+const REPO = "shuminoheya/harutyan-home";
+
+/* login2.html の JS をここに入れる（省略） */
+</script>
+
+</body>
+</html>
