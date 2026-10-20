@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archive</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1018;--panel:#141d2a;--line:#304056;--txt:#e8eef7;--muted:#a8b6c9;--accent:#65d4f1;--good:#8ee5a1;--warn:#ffd27d;--bad:#ff9292}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,sans-serif}
+main{max-width:1250px;margin:auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 5px}
+h2{font-size:1rem;margin:0 0 9px}
+.muted{color:var(--muted)}
+.panel{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:13px;margin:11px 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button,input,select{font:inherit;color:var(--txt);background:#0c1420;border:1px solid #435570;border-radius:8px;padding:9px 10px}
+button{background:#124e65;border-color:#247b95;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+select{max-width:100%;min-width:240px}
+#status{margin:9px 0 0}
+.good{color:var(--good)}
+.warn{color:var(--warn)}
+.bad{color:var(--bad)}
+#log{white-space:pre-wrap;overflow:auto;max-height:320px;background:#060a10;padding:10px;border-radius:8px;font:12px/1.45 ui-monospace,monospace;overflow-wrap:anywhere}
+.meter{height:7px;background:#273449;border-radius:9px;overflow:hidden;margin-top:9px}
+.meter>div{height:100%;width:0;background:var(--accent)}
+.warning{border-left:4px solid var(--warn);padding:8px 10px;background:#302719;border-radius:5px}
+.runtime{padding:8px;background:#0a111b;border-radius:8px;display:flex;gap:14px;flex-wrap:wrap}
+.tiny{font-size:12px}
+#filelist{max-height:180px;overflow:auto;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.viewer{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
+#preview{width:100%;height:min(75vh,900px);display:block;border:0;background:white;outline:none}
+#preview:focus{outline:2px solid var(--accent)}
+label{display:flex;gap:6px;align-items:center}
+</style>
+<style id="zip-html-lab-package-view">html,body{width:100%;height:100%;margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important}body>main{width:100%!important;max-width:none!important;height:100%!important;margin:0!important;padding:0!important}body>main>*:not(.viewer){display:none!important}.viewer{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;overflow:hidden!important;z-index:1!important}#preview{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-height:100%!important;border:0!important;border-radius:0!important;background:#000!important}#zip-package-boot{display:block!important;visibility:visible!important;position:fixed;z-index:2147483647;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,calc(100vw - 28px));padding:20px;background:rgba(10,16,25,.98);color:#fff;border:1px solid #60748d;border-radius:12px;box-shadow:0 18px 70px #000b;font:14px/1.5 system-ui,sans-serif;overflow-wrap:anywhere;white-space:normal}#zip-package-title{font-size:20px;font-weight:700}#zip-package-meter{height:14px;background:#273449;border-radius:9px;overflow:hidden;margin:14px 0 5px}#zip-package-bar{height:100%;width:0;background:#65d4f1;transition:width .12s linear}#zip-package-start{padding:10px 14px;border:1px solid #247b95;border-radius:8px;background:#124e65;color:white;font:inherit;cursor:pointer}#zip-package-start:disabled{opacity:.5}#zip-package-detail{max-height:120px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.4 monospace;color:#b7c8db}#zip-package-boot[hidden]{display:none!important}</style></head>
+<body><div id="zip-package-boot" role="status" aria-live="polite"><div id="zip-package-title">パッケージを初期化しています…</div><p id="zip-package-message">ZIPはこのHTMLファイルに埋め込まれています。準備ができたら「起動する」を押してください。</p><div id="zip-package-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="zip-package-bar"></div></div><p id="zip-package-percent">待機中</p><button id="zip-package-start" type="button">起動する</button><pre id="zip-package-detail"></pre></div>
+<main>
+<h1>ZIP HTML Lab — 汎用ZIP実行環境</h1>
+<p class="muted">ZIP内のHTMLと同梱リソースを自動解析して実行します。特定のゲーム専用ではありません。</p>
+
+<section class="panel">
+<div class="row">
+<input id="zip" type="file" accept=".zip,application/zip">
+<label><input id="verify" type="checkbox" checked=""> CRC32・サイズ検証</label>
+<select id="htmlSelect" aria-label="起動するHTML" disabled=""><option value="">ZIPを読み込んでください</option></select>
+<button id="run">実行</button>
+<button id="package">単体HTMLとしてパッケージ化</button>
+<button id="cacheClear" type="button">キャッシュクリア（メモリ解放）</button>
+<button id="stop" disabled="">停止</button>
+<button id="full" disabled="">全画面</button>
+<button id="clear">ログ消去</button>
+</div>
+<div class="meter"><div id="bar" style="width: 100%;"></div></div>
+<p id="status" class="muted">パッケージを初期化しています…</p>
+<div class="runtime">
+<span id="origin">実行元: file:</span>
+<span id="thread">SharedArrayBuffer: 利用不可</span>
+<span id="mem">メモリ目安: 4 GB</span>
+</div>
+</section>
+
+<section class="panel">
+<h2>制限</h2>
+<div class="warning">信頼できるZIPだけを実行してください。静的リソース、相対パス、fetch/XHR、動的script、一般的なWorker、EmscriptenのModule.locateFileを可能な範囲で補助します。ブラウザのfile://制限、権限、COOP/COEP、サーバーAPI、Service Worker、コードから組み立てる複雑なパスは完全再現できない場合があります。HTMLだけでブラウザのセキュリティ制限を解除することはできません。</div>
+<p class="tiny muted">ZIP64・暗号化ZIP・分割ZIPには非対応です。440MB級のZIPはメモリを多く使います。起動表示はゲームの起動成功を意味しません。ログのWASM/リソース成功記録を確認してください。</p>
+</section>
+
+<section class="panel">
+<h2>ZIP内ファイル</h2>
+<div id="filelist" class="muted">パッケージ初期化中</div>
+</section>
+
+<section class="panel">
+<h2>ログ</h2>
+<div id="log">[BOOT] ZIP HTML Lab packaged runtime.</div>
+</section>
+
+<section class="viewer">
+<iframe id="preview" title="HTMLプレビュー" allow="autoplay *; fullscreen *; gamepad *; microphone *; camera *; geolocation *; midi *; usb *; serial *; bluetooth *; accelerometer *; gyroscope *; magnetometer *; xr-spatial-tracking *; picture-in-picture *; screen-wake-lock *; clipboard-read *; clipboard-write *" allowfullscreen="" tabindex="0" src="about:blank"></iframe>
+</section>
+</main>
+
+<script>
+(()=>{
+'use strict';
+
+const $=id=>document.getElementById(id);
+let entries=new Map(),urls=new Map(),runId=0;
+const runtimeObjectUrls=new Set();
+let originalZipBytes=null,originalZipName='embedded.zip';
+const htmlBuilding=new Set();
+const logBox=$('log'),status=$('status'),bar=$('bar'),frame=$('preview');
+
+function log(level,msg){
+  const s=`[${new Date().toLocaleTimeString()}] [${level}] ${String(msg)}`;
+  logBox.textContent+='\n'+s;
+  logBox.scrollTop=logBox.scrollHeight;
+  try{console[level==='ERROR'?'error':level==='WARN'?'warn':'log'](s)}catch(_){}
+}
+function state(s,c='muted'){status.className=c;status.textContent=s}
+function progress(n){n=Math.max(0,Math.min(100,n));bar.style.width=n+'%';if(typeof window.__ZIP_HTML_LAB_BOOT_PROGRESS__==='function')window.__ZIP_HTML_LAB_BOOT_PROGRESS__(10+n*0.68,'ZIPを展開・検証中… '+Math.round(n)+'%')}
+function trackedObjectURL(blob){const url=URL.createObjectURL(blob);runtimeObjectUrls.add(url);return url}
+function bytesToBase64(bytes){
+  // Avoid argument-stack limits from apply/spread, even on large ZIPs.
+  const pieces=[];const step=12288;
+  for(let i=0;i<bytes.length;i+=step){
+    const end=Math.min(i+step,bytes.length);let binary='';
+    for(let j=i;j<end;j++)binary+=String.fromCharCode(bytes[j]);
+    pieces.push(btoa(binary));
+  }
+  return pieces.join('');
+}
+function bytesToDataURL(bytes,type){return 'data:'+(type||'application/octet-stream')+';base64,'+bytesToBase64(bytes)}
+function u16(v,o){return v.getUint16(o,true)}
+function u32(v,o){return v.getUint32(o,true)}
+
+function norm(p){
+  p=String(p).replace(/\\/g,'/');
+  const a=[];
+  for(const x of p.split('/')){
+    if(!x||x==='.')continue;
+    if(x==='..'){
+      if(!a.length)throw Error('ZIP root外へのパス: '+p);
+      a.pop();
+    }else a.push(x);
+  }
+  return a.join('/');
+}
+
+const crcTable=(()=>{
+  const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){
+    let c=n;
+    for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);
+    t[n]=c>>>0;
+  }
+  return t;
+})();
+
+function crc32(a){
+  let c=0xffffffff;
+  for(let i=0;i<a.length;i++)c=crcTable[(c^a[i])&255]^(c>>>8);
+  return(c^0xffffffff)>>>0;
+}
+
+async function inflateRaw(a){
+  if(!('DecompressionStream'in window))throw Error('このブラウザはZIP解凍APIに未対応です');
+  try{
+    return new Uint8Array(await new Response(
+      new Blob([a]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+    ).arrayBuffer());
+  }catch(e){
+    throw Error('deflate-raw解凍失敗: '+e.message);
+  }
+}
+
+async function unzip(buffer,verify){
+  const b=new Uint8Array(buffer),v=new DataView(buffer);
+  let end=-1;
+  for(let i=Math.max(0,b.length-65557);i<=b.length-22;i++){
+    if(u32(v,i)===0x06054b50)end=i;
+  }
+  if(end<0)throw Error('ZIP終端が見つかりません');
+  if(u16(v,end+4)||u16(v,end+6))throw Error('分割ZIPは未対応です');
+
+  const count=u16(v,end+10),size=u32(v,end+12),offset=u32(v,end+16);
+  if(count===65535||size===0xffffffff||offset===0xffffffff)throw Error('ZIP64は未対応です');
+  if(offset+size>b.length)throw Error('中央ディレクトリが範囲外です');
+
+  let p=offset;
+  const out=new Map();
+
+  for(let i=0;i<count;i++){
+    if(p+46>b.length||u32(v,p)!==0x02014b50)throw Error('中央ディレクトリ不正: '+i);
+
+    const flags=u16(v,p+8),method=u16(v,p+10),crc=u32(v,p+16),
+      cs=u32(v,p+20),us=u32(v,p+24),nl=u16(v,p+28),
+      el=u16(v,p+30),cl=u16(v,p+32),lo=u32(v,p+42);
+
+    if(flags&1)throw Error('暗号化ZIPは未対応です');
+    if(cs===0xffffffff||us===0xffffffff||lo===0xffffffff)throw Error('ZIP64 entryは未対応です');
+    if(p+46+nl+el+cl>b.length)throw Error('中央ディレクトリ項目が範囲外です');
+
+    const nb=b.slice(p+46,p+46+nl);
+    let name;
+    try{
+      name=new TextDecoder((flags&0x800)?'utf-8':'shift_jis').decode(nb);
+    }catch(_){
+      name=new TextDecoder().decode(nb);
+    }
+
+    p+=46+nl+el+cl;
+    name=name.replace(/\\/g,'/');
+    if(name.endsWith('/'))continue;
+    name=norm(name);
+    if(!name)continue;
+
+    if(lo+30>b.length||u32(v,lo)!==0x04034b50)throw Error('ローカルヘッダー不正: '+name);
+
+    const start=lo+30+u16(v,lo+26)+u16(v,lo+28);
+    if(start+cs>b.length)throw Error('圧縮データ範囲外: '+name);
+
+    const packed=b.subarray(start,start+cs);
+    let data;
+    if(method===0)data=packed;
+    else if(method===8)data=await inflateRaw(packed);
+    else throw Error('未対応の圧縮方式 '+method+': '+name);
+
+    if(data.length!==us)throw Error(`サイズ不一致: ${name} (${data.length}/${us})`);
+    if(verify&&crc32(data)!==crc)throw Error('CRC32不一致: '+name);
+    if(out.has(name))throw Error('重複パス: '+name);
+
+    out.set(name,{bytes:data,size:data.length,crc});
+    progress((i+1)/Math.max(1,count)*100);
+    if(i%5===0)await new Promise(r=>setTimeout(r,0));
+  }
+  return out;
+}
+
+function mime(p){
+  const e=p.split('.').pop().toLowerCase();
+  return({
+    html:'text/html;charset=utf-8',htm:'text/html;charset=utf-8',
+    css:'text/css;charset=utf-8',js:'text/javascript;charset=utf-8',
+    mjs:'text/javascript;charset=utf-8',json:'application/json;charset=utf-8',
+    txt:'text/plain;charset=utf-8',xml:'application/xml;charset=utf-8',
+    svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
+    gif:'image/gif',webp:'image/webp',avif:'image/avif',ico:'image/x-icon',
+    bmp:'image/bmp',woff:'font/woff',woff2:'font/woff2',ttf:'font/ttf',
+    otf:'font/otf',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',
+    m4a:'audio/mp4',mp4:'video/mp4',webm:'video/webm',ogv:'video/ogg',
+    wasm:'application/wasm',pdf:'application/pdf',bin:'application/octet-stream',
+    mem:'application/octet-stream',data:'application/octet-stream'
+  })[e]||'application/octet-stream';
+}
+
+function blobURL(path,bytes,type){
+  const key=(bytes?'patch:':'file:')+path;
+  if(urls.has(key))return urls.get(key);
+  const ent=entries.get(path);
+  if(!bytes&&!ent)return null;
+  const u=trackedObjectURL(new Blob([bytes||ent.bytes],{type:type||mime(path)}));
+  urls.set(key,u);
+  return u;
+}
+
+function findMatch(p){
+  p=String(p||'').replace(/\\/g,'/').replace(/^\/+/,'');
+  try{p=decodeURIComponent(p)}catch(_){}
+  p=p.replace(/^\.\//,'');
+  if(entries.has(p))return p;
+  let hits=[...entries.keys()].filter(k=>k===p||k.endsWith('/'+p));
+  if(hits.length===1)return hits[0];
+  const leaf=p.split('/').pop();
+  hits=[...entries.keys()].filter(k=>k.split('/').pop()===leaf);
+  return hits.length===1?hits[0]:null;
+}
+
+function resolve(base,raw){
+  raw=String(raw==null?'':raw).trim();
+  if(!raw||raw[0]==='#'||/^(data:|blob:|https?:|javascript:|mailto:|tel:|\/\/)/i.test(raw))return null;
+  let s=raw.split('#')[0].split('?')[0];
+  if(!s)return null;
+  try{s=decodeURIComponent(s)}catch(_){}
+  if(/^file:/i.test(s)){
+    try{s=decodeURIComponent(new URL(s).pathname)}catch(_){s=s.replace(/^file:\/*/i,'')}
+  }
+  if(/^[a-z]:\//i.test(s)||s.startsWith('/')){
+    const absolute=findMatch(s);
+    if(absolute)return absolute;
+    s=s.replace(/^[a-z]:\//i,'').replace(/^\/+/, '');
+  }
+  let p;
+  try{p=norm((base.includes('/')?base.slice(0,base.lastIndexOf('/')+1):'')+s)}catch(_){p=null}
+  if(p&&entries.has(p))return p;
+  return p?findMatch(p):findMatch(s);
+}
+
+function post(level,msg){
+  try{parent.postMessage({zipHtmlLog:level,message:String(msg)},'*')}catch(_){}
+}
+
+function patchJs(src,path){
+  const original=src;
+  src=src.replace(/\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g,(all,q,s)=>{
+    const p=resolve(path,s);
+    return p&&entries.has(p)?'import('+JSON.stringify(blobURL(p))+')':all;
+  });
+  src=src.replace(/\bimportScripts\s*\(\s*(['"])([^'"]+)\1\s*\)/g,(all,q,s)=>{
+    const p=resolve(path,s);
+    return p&&entries.has(p)?'importScripts('+JSON.stringify(blobURL(p))+')':all;
+  });
+  src=src.replace(/\bnew\s+URL\(\s*(['"])([^'"]+)\1\s*,\s*import\.meta\.url\s*\)/g,(all,q,s)=>{
+    const p=resolve(path,s);
+    return p&&entries.has(p)?'new URL('+JSON.stringify(blobURL(p))+')':all;
+  });
+  if(src!==original)log('INFO','JS互換変換: '+path);
+  return src;
+}
+
+function jsURL(path){
+  const key='js:'+path;
+  if(urls.has(key))return urls.get(key);
+  const e=entries.get(path);
+  if(!e)return null;
+  const code=patchJs(new TextDecoder().decode(e.bytes),path);
+  const u=blobURL(path,new TextEncoder().encode(code),'text/javascript;charset=utf-8');
+  urls.set(key,u);
+  return u;
+}
+
+// Worker向け: blob:null 内の importScripts(blob:null/...) が拒否される環境に備え、
+// ZIP内の静的 importScripts を元の位置でインライン化した単一スクリプトを作る。
+function workerBundleCode(path,stack=[]){
+  if(stack.includes(path))throw Error('Worker循環importScripts: '+stack.concat(path).join(' -> '));
+  const ent=entries.get(path);
+  if(!ent)throw Error('Workerスクリプトがありません: '+path);
+  let src=new TextDecoder().decode(ent.bytes);
+  const chain=stack.concat(path);
+
+  const isBootstrap=/(?:worker|bootstrap)/i.test(path.split('/').pop());
+  const handlerAt=src.search(/\bonmessage\s*=/);
+  const importAt=src.search(/\bimportScripts\s*\(/);
+
+  if(isBootstrap && handlerAt>=0 && importAt>handlerAt){
+    const hoisted=[];
+    src=src.replace(/\bimportScripts\s*\(([^)]*)\)\s*;?/g,(whole,args,offset)=>{
+      if(offset<handlerAt)return whole;
+      const refs=[...args.matchAll(/(['"])(.*?)\1/g)].map(m=>m[2]);
+      if(!refs.length)return whole;
+      const chunks=[];
+      for(const ref of refs){
+        const child=resolve(path,ref);
+        if(!child||!entries.has(child)){
+          log('WARN','Worker importScripts参照を解決できません: '+path+' -> '+ref);
+          return whole;
+        }
+        try{
+          chunks.push('\n/* ZIP Worker importScripts hoisted: '+child.replace(/\*\//g,'* /')+' */\n'+workerBundleCode(child,chain)+'\n/* end hoisted: '+child.replace(/\*\//g,'* /')+' */\n');
+        }catch(e){
+          log('ERROR','Worker JS結合失敗: '+child+' : '+e.message);
+          return whole;
+        }
+      }
+      hoisted.push(...chunks);
+      log('INFO','Worker importScriptsをグローバルへ移動: '+path+' ('+refs.join(', ')+')');
+      return '';
+    });
+    if(hoisted.length)src=src+'\n'+hoisted.join('\n');
+  }else{
+    src=src.replace(/\bimportScripts\s*\(([^)]*)\)\s*;?/g,(whole,args)=>{
+      const refs=[...args.matchAll(/(['"])(.*?)\1/g)].map(m=>m[2]);
+      if(!refs.length)return whole;
+      const chunks=[];
+      let allResolved=true;
+      for(const ref of refs){
+        const child=resolve(path,ref);
+        if(!child||!entries.has(child)){
+          allResolved=false;
+          log('WARN','Worker importScripts参照を解決できません: '+path+' -> '+ref);
+          break;
+        }
+        try{
+          chunks.push('\n/* ZIP Worker importScripts inline: '+child.replace(/\*\//g,'* /')+' */\n'+workerBundleCode(child,chain)+'\n/* end inline: '+child.replace(/\*\//g,'* /')+' */\n');
+        }catch(e){
+          allResolved=false;
+          log('ERROR','Worker JS結合失敗: '+child+' : '+e.message);
+          break;
+        }
+      }
+      if(!allResolved)return whole;
+      log('INFO','Worker importScripts結合: '+path+' ('+refs.join(', ')+')');
+      return chunks.join('\n');
+    });
+  }
+  return patchJs(src,path+' [Worker bundle]');
+}
+
+function workerBundleURL(path){
+  const key='worker-bundle:'+path;
+  if(urls.has(key))return urls.get(key);
+  const code=workerBundleCode(path);
+  const u=trackedObjectURL(new Blob([code],{type:'text/javascript;charset=utf-8'}));
+  urls.set(key,u);
+  return u;
+}
+
+function cssRewrite(css,path){
+  return css.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi,(all,q,s)=>{
+    const p=resolve(path,s);
+    return p&&entries.has(p)?'url("'+blobURL(p)+'")':all;
+  }).replace(/@import\s+(?:url\()?\s*(['"])(.*?)\1\s*\)?\s*;/gi,(all,q,s)=>{
+    const p=resolve(path,s);
+    if(!p||!entries.has(p))return all;
+    const child=cssRewrite(new TextDecoder().decode(entries.get(p).bytes),p);
+    return '@import url("'+trackedObjectURL(new Blob([child],{type:'text/css'}))+'");';
+  });
+}
+
+function listHtml(){
+  const s=$('htmlSelect');
+  s.replaceChildren();
+  const hs=[...entries.keys()].filter(p=>/\.html?$/i.test(p)).sort((a,b)=>{
+    const ai=/(^|\/)index\.html?$/i.test(a),bi=/(^|\/)index\.html?$/i.test(b);
+    return ai===bi?a.localeCompare(b,'ja'):ai?-1:1;
+  });
+  for(const p of hs){
+    const o=document.createElement('option');
+    o.value=p;
+    o.textContent=p;
+    s.append(o);
+  }
+  s.disabled=!hs.length;
+  $('run').disabled=!hs.length;
+  log(hs.length?'INFO':'WARN',`HTMLファイル検出: ${hs.length}`);
+}
+
+function makeRuntime(path){
+  const base=path.includes('/')?path.slice(0,path.lastIndexOf('/')+1):'';
+  const map={},workerMap={};
+  for(const p of entries.keys())map[p]=/\.(?:js|mjs)$/i.test(p)?jsURL(p):blobURL(p);
+
+  const workerCandidates=new Set([...entries.keys()].filter(p=>/\.(?:js|mjs)$/i.test(p)&&/(?:worker|bootstrap)/i.test(p.split('/').pop())));
+  for(const [srcPath,ent] of entries){
+    if(!/\.(?:js|mjs)$/i.test(srcPath))continue;
+    const src=new TextDecoder().decode(ent.bytes);
+    for(const m of src.matchAll(/\bnew\s+Worker\s*\(\s*(['"])([^'"]+\.(?:js|mjs)(?:[?#][^'"]*)?)\1/gi)){
+      const q=resolve(srcPath,m[2]);
+      if(q&&entries.has(q))workerCandidates.add(q);
+    }
+  }
+  for(const p of workerCandidates){
+    try{workerMap[p]=workerBundleURL(p)}
+    catch(e){log('WARN','Worker bundleを事前作成できません: '+p+' : '+e.message)}
+  }
+
+  return `
+window.__ZIP_HTML_PATH=${JSON.stringify(path)};
+window.__ZIP_HTML_BASE=${JSON.stringify(base)};
+window.__ZIP_ASSET_MAP=${JSON.stringify(map)};
+window.__ZIP_WORKER_MAP=${JSON.stringify(workerMap)};
+(function(){
+'use strict';
+var map=window.__ZIP_ASSET_MAP||{},base=window.__ZIP_HTML_BASE||'',nativeFetch=window.fetch.bind(window),XHR=window.XMLHttpRequest,WorkerNative=window.Worker;
+
+function normLocal(p){
+  var a=[];
+  for(var x of String(p).replace(/\\\\/g,'/').split('/')){
+    if(!x||x==='.')continue;
+    if(x==='..'){if(!a.length)return null;a.pop()}else a.push(x);
+  }
+  return a.join('/');
+}
+
+function pathOf(raw){
+  try{
+    var s=String(raw&&raw.url||raw||'');
+    if(!s||/^(data:|blob:|https?:|javascript:|mailto:|tel:)/i.test(s)||s.indexOf('//')===0)return null;
+    var file=/^file:/i.test(s);
+    if(file){try{s=new URL(s).pathname}catch(_){return null}}
+    s=s.split('#')[0].split('?')[0];
+    try{s=decodeURIComponent(s)}catch(_){}
+    var p;
+    if(file||/^[A-Za-z]:\\//.test(s)||s.charAt(0)==='/'){
+      p=normLocal(s.replace(/^[A-Za-z]:\\//,'').replace(/^\\//,''));
+      if(p&&Object.prototype.hasOwnProperty.call(map,p))return p;
+      var suffix=Object.keys(map).filter(function(k){return p&&(k===p||k.endsWith('/'+p))});
+      if(suffix.length===1)return suffix[0];
+      var leaf=(p||s).split('/').pop(),same=Object.keys(map).filter(function(k){return k.split('/').pop()===leaf});
+      return same.length===1?same[0]:null;
+    }
+    p=normLocal(base+s);
+    if(p&&Object.prototype.hasOwnProperty.call(map,p))return p;
+    var matches=Object.keys(map).filter(function(k){return p&&(k===p||k.endsWith('/'+p))});
+    if(matches.length===1)return matches[0];
+    var leaf=s.split('/').pop(),leaves=Object.keys(map).filter(function(k){return k.split('/').pop()===leaf});
+    return leaves.length===1?leaves[0]:null;
+  }catch(_){return null}
+}
+
+window.__ZIP_RESOLVE=function(raw){
+  var p=pathOf(raw),s=String(raw&&raw.url||raw||'');
+  if(p){post('INFO','URL解決: '+s+' -> '+p);return map[p]}
+  if(/^file:/i.test(s)||s.charAt(0)==='/'||/^[A-Za-z]:/.test(s))post('ERROR','ZIP内の参照先を一意に特定できません: '+s);
+  return s;
+};
+
+// 動的に生成される画像・音声・script等は、transform()実行時には存在しないため、
+// DOM追加時にもZIP内パスを解決する。HTML iframeだけは変換済みHTMLを親側に要求する。
+var zipPendingFrames=Object.create(null),zipFrameSeq=0;
+window.addEventListener('message',function(e){
+  var d=e.data;
+  if(!d||!d.zipHtmlFrameResponse)return;
+  var item=zipPendingFrames[d.zipHtmlFrameResponse];
+  if(!item)return;
+  delete zipPendingFrames[d.zipHtmlFrameResponse];
+  if(d.url){
+    if(item.navigate)location.href=d.url;
+    else if(item.element&&item.element.isConnected){item.element.__zipFramePending=false;item.element.src=d.url;}
+    post('INFO','ZIP内HTMLを表示: '+item.path);
+  }else post('ERROR','ZIP内HTML変換失敗: '+item.path+' '+(d.error||''));
+});
+function zipOpenHtmlFrame(el,p){
+  if(el.__zipFramePending)return;
+  el.__zipFramePending=true;
+  var id='zipframe-'+(++zipFrameSeq);
+  zipPendingFrames[id]={element:el,path:p,navigate:false};
+  el.setAttribute('src','about:blank');
+  top.postMessage({zipHtmlFrameRequest:id,path:p},'*');
+}
+function zipRewriteElement(el){
+  if(!el||el.nodeType!==1)return;
+  var tag=el.tagName,attr=null;
+  if(tag==='A'||tag==='AREA'){
+    var href=el.getAttribute('href');
+    var hp=href&&pathOf(href);
+    if(hp&&map[hp]&&/\.html?$/i.test(hp)){
+      el.setAttribute('href','#zip-html='+encodeURIComponent(hp));
+      el.setAttribute('data-zip-nav',hp);
+    }
+    return;
+  }
+  if(tag==='IFRAME'){
+    var fr=el.getAttribute('src');
+    var fp=fr&&pathOf(fr);
+    if(fp&&map[fp]&&/\.html?$/i.test(fp)){zipOpenHtmlFrame(el,fp);return;}
+    attr='src';
+  }else if(tag==='OBJECT')attr='data';
+  else if(tag==='LINK')attr='href';
+  else if(['IMG','AUDIO','VIDEO','SOURCE','TRACK','INPUT','EMBED','SCRIPT'].indexOf(tag)>=0)attr='src';
+  if(attr){
+    var raw=el.getAttribute(attr),p=raw&&pathOf(raw);
+    if(p&&map[p]&&raw!==map[p]){
+      el.setAttribute(attr,map[p]);
+      post('INFO','動的リソース解決: '+raw+' -> '+p);
+    }
+  }
+  if(el.hasAttribute('srcset')){
+    var set=el.getAttribute('srcset');
+    var changed=set.split(',').map(function(part){
+      var bits=part.trim().split(/\s+/),p=bits[0]&&pathOf(bits[0]);
+      if(p&&map[p])bits[0]=map[p];
+      return bits.join(' ');
+    }).join(', ');
+    if(changed!==set)el.setAttribute('srcset',changed);
+  }
+}
+function zipScan(root){
+  if(root&&root.nodeType===1)zipRewriteElement(root);
+  if(root&&root.querySelectorAll)root.querySelectorAll('img[src],audio[src],video[src],source[src],track[src],script[src],link[href],input[src],embed[src],object[data],iframe[src],a[href],area[href],[srcset]').forEach(zipRewriteElement);
+}
+var zipObserver=new MutationObserver(function(records){
+  records.forEach(function(r){
+    if(r.type==='childList')r.addedNodes.forEach(function(n){zipScan(n)});
+    else if(r.type==='attributes')zipRewriteElement(r.target);
+  });
+});
+try{zipObserver.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['src','href','data','srcset']});zipScan(document.documentElement);}
+catch(e){post('WARN','動的リソース監視を開始できません: '+String(e));}
+
+// new Audio('relative/path') はDOMに追加されないことがあるため、生成時にも解決する。
+try{
+  var NativeAudio=window.Audio;
+  window.Audio=function(src){
+    var a=new NativeAudio();
+    if(src!=null&&String(src)!=='')a.src=window.__ZIP_RESOLVE(String(src));
+    return a;
+  };
+  window.Audio.prototype=NativeAudio.prototype;
+}catch(e){post('WARN','Audio参照補助を設定できません: '+String(e));}
+
+// new Image() のようにDOM追加前にsrcが設定されるケースを補助する。
+try{
+  var imageSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+  if(imageSrc&&imageSrc.get&&imageSrc.set&&imageSrc.configurable){
+    Object.defineProperty(HTMLImageElement.prototype,'src',{configurable:true,enumerable:imageSrc.enumerable,
+      get:function(){return imageSrc.get.call(this)},
+      set:function(v){return imageSrc.set.call(this,window.__ZIP_RESOLVE(String(v)))}});
+  }
+}catch(e){post('WARN','Image.src補助を設定できません: '+String(e));}
+
+window.fetch=function(input,init){
+  var raw=String(input&&input.url||input||''),mapped=window.__ZIP_RESOLVE(input);
+  if(mapped===raw)return nativeFetch(input,init);
+  return nativeFetch(mapped,init);
+};
+
+if(XHR){
+  try{
+    var open=XHR.prototype.open;
+    XHR.prototype.open=function(method,url){
+      var a=[].slice.call(arguments),raw=String(url==null?'':url),mapped=window.__ZIP_RESOLVE(raw);
+      if(mapped!==raw){
+        a[1]=mapped;
+        post('INFO','XHR.open: '+raw+' -> '+mapped);
+      }else if(/^file:/i.test(raw)||raw.charAt(0)==='/'||/^[A-Za-z]:/.test(raw)){
+        post('ERROR','XHR参照を解決できません: '+raw);
+      }
+      try{return open.apply(this,a)}
+      catch(e){post('ERROR','XHR.open例外 '+raw+': '+String(e&&e.stack||e));throw e}
+    };
+    post('INFO','ネイティブXHR URLフック有効');
+  }catch(e){post('ERROR','XHRフック失敗: '+String(e))}
+}
+
+try{
+  var d=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,'src');
+  if(d&&d.get&&d.set&&d.configurable){
+    Object.defineProperty(HTMLScriptElement.prototype,'src',{
+      configurable:true,enumerable:d.enumerable,
+      get:function(){return d.get.call(this)},
+      set:function(v){
+        var raw=String(v),mapped=window.__ZIP_RESOLVE(raw);
+        if(mapped!==raw)post('INFO','動的SCRIPT: '+raw+' -> '+mapped);
+        return d.set.call(this,mapped);
+      }
+    });
+  }
+  post('INFO','動的SCRIPT.srcフック有効');
+}catch(e){post('WARN','SCRIPTフックを設定できません: '+String(e))}
+
+if(WorkerNative){
+  window.Worker=function(url,opts){
+    var raw=String(url&&url.url||url),p=pathOf(raw),
+      mapped=p&&window.__ZIP_WORKER_MAP&&window.__ZIP_WORKER_MAP[p]||window.__ZIP_RESOLVE(raw);
+    if(mapped!==raw){
+      post('INFO','Worker URL: '+raw+' -> '+mapped+(p&&window.__ZIP_WORKER_MAP&&window.__ZIP_WORKER_MAP[p]?' (importScripts結合済み)':''));
+      try{return new WorkerNative(mapped,opts)}
+      catch(e){post('ERROR','Worker生成失敗: '+String(e&&e.stack||e));throw e}
+    }
+    return new WorkerNative(url,opts);
+  };
+  window.Worker.prototype=WorkerNative.prototype;
+}
+
+// Wrap Module assignment so Emscripten locateFile requests are resolved using ZIP paths.
+var mod;
+try{
+  Object.defineProperty(window,'Module',{
+    configurable:true,
+    get:function(){return mod},
+    set:function(v){
+      mod=v;
+      if(v&&typeof v==='object'){
+        if(typeof v.locateFile==='function'&&!v.__zipLocateWrapped){
+          var old=v.locateFile;
+          v.locateFile=function(name,prefix){
+            var result=old.call(this,name,prefix),mapped=window.__ZIP_RESOLVE(result);
+            if(mapped===result){
+              var byName=window.__ZIP_RESOLVE(name);
+              if(byName!==name)mapped=byName;
+            }
+            if(mapped!==result)post('INFO','Module.locateFile: '+name+' -> '+mapped);
+            else post('WARN','Module.locateFile未解決: '+name+' (result='+result+')');
+            return mapped;
+          };
+          v.__zipLocateWrapped=true;
+        }else if(!v.locateFile){
+          v.locateFile=function(name,prefix){
+            var mapped=window.__ZIP_RESOLVE(name);
+            if(mapped!==name)return mapped;
+            var joined=String(prefix||'')+String(name);
+            mapped=window.__ZIP_RESOLVE(joined);
+            if(mapped!==joined)return mapped;
+            post('WARN','Module.locateFile参照未解決: '+name+' prefix='+prefix);
+            return joined;
+          };
+        }
+        post('INFO','Module設定を検出: '+Object.keys(v).slice(0,25).join(','));
+      }
+    }
+  });
+}catch(e){post('WARN','Module診断フック設定失敗: '+String(e))}
+
+function describe(x){
+  try{
+    if(x===undefined)return 'undefined';
+    if(x&&x.stack)return x.stack;
+    if(typeof x==='object')return JSON.stringify(x);
+    return String(x);
+  }catch(_){return String(x)}
+}
+
+window.addEventListener('error',function(e){
+  var t=e.target;
+  if(t&&t!==window){
+    post('ERROR','リソース読み込み失敗: '+(t.tagName||'?')+' '+String(t.src||t.href||t.data||''));
+    return;
+  }
+  post('ERROR','JS例外: '+String(e.message||'')+' | '+String(e.filename||'')+':'+String(e.lineno||0)+':'+String(e.colno||0)+' | '+describe(e.error));
+},true);
+
+window.addEventListener('unhandledrejection',function(e){
+  post('ERROR','未処理Promise拒否: '+describe(e.reason));
+  try{
+    post('TRACE','直近リソース:\\n'+performance.getEntriesByType('resource').slice(-25).map(function(x){
+      return x.initiatorType+' '+x.name+' '+Math.round(x.duration)+'ms';
+    }).join('\\n'));
+  }catch(_){}
+});
+
+if(typeof WebAssembly!=='undefined')
+['instantiate','instantiateStreaming','compile','compileStreaming'].forEach(function(k){
+  try{
+    var old=WebAssembly[k];
+    if(typeof old!=='function')return;
+    WebAssembly[k]=function(){
+      var a=arguments;
+      post('INFO','WASM '+k+' 開始: '+String(a[0]&&a[0].url||a[0]&&a[0].constructor&&a[0].constructor.name||typeof a[0]));
+      var r;
+      try{r=old.apply(this,a)}
+      catch(e){post('ERROR','WASM '+k+' 同期失敗: '+describe(e));throw e}
+      if(r&&typeof r.then==='function')return r.then(function(v){
+        post('OK','WASM '+k+' 成功');return v;
+      },function(e){
+        post('ERROR','WASM '+k+' 失敗: '+describe(e));throw e;
+      });
+      post('OK','WASM '+k+' 完了');
+      return r;
+    };
+  }catch(e){post('WARN','WASM計測設定失敗 '+k+': '+String(e))}
+});
+
+try{
+  window.addEventListener('pointerdown',function(){try{window.focus()}catch(_){}},true);
+  window.addEventListener('focus',function(){post('INFO','ゲーム側windowがフォーカスを取得')});
+}catch(_){}
+
+try{
+  var pp=document.permissionsPolicy||document.featurePolicy;
+  post('INFO','権限API: gamepad='+String(!pp||!pp.allowsFeature||pp.allowsFeature('gamepad'))+' microphone='+String(!pp||!pp.allowsFeature||pp.allowsFeature('microphone'))+' camera='+String(!pp||!pp.allowsFeature||pp.allowsFeature('camera'))+' fullscreen='+String(!pp||!pp.allowsFeature||pp.allowsFeature('fullscreen')));
+}catch(e){post('WARN','権限ポリシー診断失敗: '+String(e))}
+
+post('INFO','入力/メディア診断: getGamepads='+String(typeof navigator.getGamepads)+' mediaDevices='+String(!!navigator.mediaDevices)+' getUserMedia='+String(!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia))+' | secure='+isSecureContext);
+post('INFO','診断フック開始: page='+location.href+' | baseURI='+document.baseURI+' | secure='+isSecureContext+' | isolated='+crossOriginIsolated);
+})();
+
+function post(level,message){
+  try{parent.postMessage({zipHtmlLog:level,message:String(message)},'*')}catch(_){}
+}
+
+window.addEventListener('click',function(e){
+  var a=e.target.closest&&e.target.closest('[data-zip-nav]');
+  if(a){
+    e.preventDefault();
+    var p=a.getAttribute('data-zip-nav');
+    if(window.parent===window.top){
+      top.postMessage({zipHtmlNavigate:p},'*');
+    }else{
+      var id='zipnav-'+(++zipFrameSeq);
+      zipPendingFrames[id]={navigate:true,path:p};
+      top.postMessage({zipHtmlFrameRequest:id,path:p},'*');
+    }
+  }
+});
+`;
+}
+
+function transformedHtmlURL(path){
+  const key='html-transform:'+path;
+  if(urls.has(key))return urls.get(key);
+  // Break HTML iframe cycles without recursively transforming forever.
+  if(htmlBuilding.has(path))return blobURL(path);
+  htmlBuilding.add(path);
+  try{
+    const html=transform(path);
+    const url=trackedObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+    urls.set(key,url);
+    log('INFO','埋込HTMLを変換: '+path);
+    return url;
+  }finally{
+    htmlBuilding.delete(path);
+  }
+}
+
+function transform(path){
+  const ent=entries.get(path);
+  if(!ent)throw Error('HTMLがありません: '+path);
+
+  const doc=new DOMParser().parseFromString(new TextDecoder().decode(ent.bytes),'text/html');
+  const originalBase=doc.querySelector('base[href]');
+  let baseHref=originalBase?originalBase.getAttribute('href'):'';
+  doc.querySelectorAll('base').forEach(x=>x.remove());
+
+  const resourceSel='script[src],img[src],audio[src],video[src],source[src],track[src],input[src],embed[src],object[data],iframe[src],link[href]';
+
+  doc.querySelectorAll(resourceSel).forEach(el=>{
+    const attr=el.hasAttribute('src')?'src':el.hasAttribute('href')?'href':el.hasAttribute('data')?'data':null;
+    if(!attr)return;
+
+    const raw=el.getAttribute(attr);
+    let refBase=path;
+    if(baseHref){
+      const b=resolve(path,baseHref);
+      if(b)refBase=b;
+    }
+
+    const p=resolve(refBase,raw);
+    if(!p){
+      if(raw&&!/^(data:|blob:|https?:|\/\/|#)/i.test(raw))log('WARN','静的URLを解析できません: '+path+' -> '+raw);
+      return;
+    }
+
+    if(!entries.has(p)){
+      log('WARN','ZIP内ファイルなし: '+path+' -> '+raw+' (候補 '+p+')');
+      return;
+    }
+
+    if(el.tagName==='IFRAME'&&/\.html?$/i.test(p)){
+      el.setAttribute(attr,transformedHtmlURL(p));
+    }else if(el.tagName==='LINK'&&/stylesheet/i.test(el.getAttribute('rel')||'')){
+      const css=cssRewrite(new TextDecoder().decode(entries.get(p).bytes),p);
+      el.setAttribute('href',trackedObjectURL(new Blob([css],{type:'text/css;charset=utf-8'})));
+    }else if(el.tagName==='SCRIPT'&&/\.(?:js|mjs)$/i.test(p)){
+      el.setAttribute(attr,jsURL(p));
+    }else if(el.tagName==='IMG'){
+      // パッケージ版(file://)ではblob:nullの起源差で画像が失敗する環境があるため、
+      // 画像だけdata URLへ変換する。通常のラボ実行では従来どおりBlob URLを使う。
+      const imageBytes=entries.get(p).bytes;
+      const useDataUrl=!!window.__ZIP_HTML_LAB_PACKAGED__&&imageBytes.byteLength<=8*1024*1024;
+      const imageUrl=useDataUrl?bytesToDataURL(imageBytes,mime(p)):blobURL(p);
+      log('INFO',`[IMG CHECK] ${p} -> ${useDataUrl?'data URL (small image)':imageUrl}`);
+      el.setAttribute(attr,imageUrl);
+    }else{
+      el.setAttribute(attr,blobURL(p));
+    }
+  });
+
+  doc.querySelectorAll('script:not([src])').forEach(el=>{
+    if(el.textContent)el.textContent=patchJs(el.textContent,path+' (inline)');
+  });
+  doc.querySelectorAll('[style]').forEach(el=>el.setAttribute('style',cssRewrite(el.getAttribute('style'),path)));
+  doc.querySelectorAll('style').forEach(el=>el.textContent=cssRewrite(el.textContent,path));
+  doc.querySelectorAll('[srcset]').forEach(el=>{
+    el.setAttribute('srcset',el.getAttribute('srcset').split(',').map(x=>{
+      const bits=x.trim().split(/\s+/),p=resolve(path,bits[0]);
+      if(p&&entries.has(p))bits[0]=blobURL(p);
+      return bits.join(' ');
+    }).join(', '));
+  });
+  doc.querySelectorAll('a[href],area[href]').forEach(el=>{
+    const p=resolve(path,el.getAttribute('href'));
+    if(p&&entries.has(p)&&/\.html?$/i.test(p)){
+      el.setAttribute('href','#zip-html='+encodeURIComponent(p));
+      el.setAttribute('data-zip-nav',p);
+    }
+  });
+
+  const shim=doc.createElement('script');
+  shim.textContent=`(function(){
+`+
+    `function report(level,msg){try{parent.postMessage({zipHtmlLog:level,message:msg},'*')}catch(_){}}
+`+
+    `document.addEventListener('load',function(e){var el=e.target;if(el&&el.tagName==='IMG')report('OK','[IMG LOAD] '+(el.getAttribute('src')||'')+' '+el.naturalWidth+'x'+el.naturalHeight)},true);
+`+
+    `document.addEventListener('error',function(e){var el=e.target;if(el&&el.tagName==='IMG')report('ERROR','[IMG ERROR] src='+(el.currentSrc||el.src||'')+' complete='+el.complete+' naturalSize='+el.naturalWidth+'x'+el.naturalHeight)},true);
+`+
+    `})();
+`+makeRuntime(path);
+  doc.head.insertBefore(shim,doc.head.firstChild);
+  return '<!doctype html>\n'+doc.documentElement.outerHTML;
+}
+
+async function run(){
+  const path=$('htmlSelect').value;
+  if(!path)return false;
+  const id=++runId;
+  try{
+    log('INFO','HTML変換開始: '+path);
+    if(typeof window.__ZIP_HTML_LAB_BOOT_PROGRESS__==='function')window.__ZIP_HTML_LAB_BOOT_PROGRESS__(82,'HTMLを起動用に変換中…');
+    const output=transform(path);
+    // iframe loadを待ってから成功扱いにする。srcdocをセットしただけでは起動完了ではない。
+    const loadPromise=new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);frame.removeEventListener('load',onLoad);fn(value)};
+      const onLoad=()=>finish(resolve,true);
+      const timer=setTimeout(()=>finish(reject,new Error('プレビューの読込が15秒以内に完了しませんでした')),15000);
+      frame.addEventListener('load',onLoad,{once:true});
+    });
+    if(typeof window.__ZIP_HTML_LAB_BOOT_PROGRESS__==='function')window.__ZIP_HTML_LAB_BOOT_PROGRESS__(88,'HTMLをプレビューへ読み込み中…');
+    frame.srcdoc=output;
+    $('stop').disabled=false;
+    $('full').disabled=false;
+    await loadPromise;
+    if(id!==runId)return false;
+    state('HTMLをiframeに読み込みました。画像・WASM等の結果はログを確認してください: '+path,'good');
+    if(typeof window.__ZIP_HTML_LAB_BOOT_PROGRESS__==='function')window.__ZIP_HTML_LAB_BOOT_PROGRESS__(100,'HTMLの読み込みイベントを確認しました');
+    log('OK','iframe loadイベントを確認: '+path);
+    log('INFO','操作方法: プレビュー内を一度クリックしてフォーカスを渡してください。キーボードは選択中のゲームに直接入力されます');
+    return true;
+  }catch(e){
+    window.__zipHtmlLabLastError=e&&e.message?e.message:String(e);
+    state('起動失敗: '+(e&&e.message||e),'bad');
+    log('ERROR',e.stack||e.message||String(e));
+    return false;
+  }
+}
+
+async function importZipFile(f,autoRun=false){
+  if(!f)return;
+  runId++;
+  frame.src='about:blank';
+  for(const u of runtimeObjectUrls)try{URL.revokeObjectURL(u)}catch(_){}
+  runtimeObjectUrls.clear();
+  urls.clear();
+  htmlBuilding.clear();
+  entries.clear();
+  $('run').disabled=true;
+  $('package').disabled=true;
+  originalZipBytes=null;
+  $('stop').disabled=true;
+  $('full').disabled=true;
+  progress(0);
+  $('filelist').textContent='';
+  state('ZIPを展開・検証中…');
+  log('INFO',`ZIP読込開始: ${f.name} (${f.size.toLocaleString()} bytes)`);
+
+  try{
+    const buf=await f.arrayBuffer();
+    originalZipBytes=f._embedded===true?null:buf;
+    originalZipName=f.name||'embedded.zip';
+    if(f._embedded===true)log('INFO','内蔵ZIPモード: 展開完了後に圧縮ZIP本体を保持しない設定');
+    log('INFO',`ZIPをメモリに読込: ${buf.byteLength.toLocaleString()} bytes`);
+    entries=await unzip(buf,$('verify').checked);
+    $('filelist').textContent=[...entries.keys()].sort((a,b)=>a.localeCompare(b,'ja')).map(p=>
+      `${p} (${entries.get(p).size.toLocaleString()} B${$('verify').checked?', CRC '+entries.get(p).crc.toString(16).padStart(8,'0'):''})`
+    ).join('\n');
+    log('OK',`展開完了: ${entries.size}ファイル`);
+    $('package').disabled=f._embedded===true;
+    listHtml();
+    $('origin').textContent='実行元: '+location.protocol;
+    $('thread').textContent='SharedArrayBuffer: '+(crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'?'利用可能':'利用不可');
+    $('mem').textContent='メモリ目安: '+(navigator.deviceMemory?navigator.deviceMemory+' GB':'ブラウザ非公開');
+    if(!crossOriginIsolated)log('WARN','SharedArrayBuffer不可。WASMスレッドには対応ビルドとCOOP/COEP等が必要です');
+    state(entries.size+'ファイルを読込。HTMLを選択してください','good');
+    if(autoRun){
+      const first=[...$('htmlSelect').options].find(option=>option.value);
+      if(first){
+        $('htmlSelect').value=first.value;
+        log('INFO','パッケージ起動: 既定HTMLを自動実行します: '+first.value);
+        if(!(await run())) return false;
+      }else{
+        const message='パッケージ内にHTMLがないため自動実行できません';
+        window.__zipHtmlLabLastError=message;
+        log('ERROR',message);
+        return false;
+      }
+    }
+    return true;
+  }catch(e){
+    entries.clear();
+    originalZipBytes=null;
+    $('package').disabled=true;
+    window.__zipHtmlLabLastError=e&&e.message?e.message:String(e);
+    state('ZIP読込失敗: '+(e&&e.message||e),'bad');
+    log('ERROR',e.stack||e.message||String(e));
+    return false;
+  }
+}
+window.__zipHtmlLabImportFile=importZipFile;
+$('zip').addEventListener('change',()=>importZipFile($('zip').files&&$('zip').files[0]));
+
+frame.addEventListener('load',()=>{
+  if(frame.srcdoc)log('INFO','プレビューiframe読込完了。操作するにはプレビュー内をクリックしてください');
+});
+
+frame.addEventListener('pointerdown',()=>{
+  frame.focus();
+  try{frame.contentWindow&&frame.contentWindow.focus()}
+  catch(e){log('WARN','ゲームのフォーカス取得: '+e.message)}
+});
+
+frame.addEventListener('load',()=>{
+  try{
+    frame.focus();
+    log('INFO','プレビューiframe読込完了。操作するにはプレビュー内をクリックしてください');
+  }catch(e){
+    log('WARN','iframeフォーカス設定: '+e.message);
+  }
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='F11'&&document.activeElement===frame){
+    log('INFO','F11はブラウザ側の全画面キーです。上の「全画面」ボタンも利用できます');
+  }
+});
+
+$('package').addEventListener('click',async()=>{
+  if(!originalZipBytes){
+    state('パッケージ化できません: 元のZIPデータがありません','bad');
+    log('ERROR','パッケージ化中止: 元のZIPデータがありません');
+    return;
+  }
+
+  const zipBuffer=originalZipBytes;
+  const zipSize=zipBuffer.byteLength;
+  const safe=(originalZipName.replace(/\.zip$/i,'')||'ZIP').replace(/[\\/:*?"<>|]/g,'_');
+  const suggestedName=safe+'.html';
+  let writable=null;
+  let saveHandle=null;
+  const useStreamingSave=zipSize>50*1024*1024;
+
+  // 50MB超は、巨大なHTML文字列を作る前に保存先を選択する。
+  if(useStreamingSave){
+    if(typeof window.showSaveFilePicker!=='function'){
+      const message='ZIPが50MBを超えていますが、このブラウザでは保存先を指定するAPIが使えません。メモリ保護のためパッケージ化を中止しました。Chrome/Edgeの対応環境で開いてください。';
+      state(message,'bad'); log('ERROR',message); return;
+    }
+    try{
+      saveHandle=await window.showSaveFilePicker({
+        suggestedName,
+        types:[{description:'HTMLファイル',accept:{'text/html':['.html']}}]
+      });
+      writable=await saveHandle.createWritable();
+    }catch(e){
+      if(e&&e.name==='AbortError'){
+        state('保存をキャンセルしました'); log('INFO','大容量パッケージの保存はキャンセルされました');
+      }else{
+        state('保存先を開けません: '+(e&&e.message||e),'bad');
+        log('ERROR','保存先の準備に失敗: '+(e.stack||e.message||e));
+      }
+      return;
+    }
+  }
+
+  try{
+    state(useStreamingSave?'大容量パッケージを書き出しています…':'パッケージを生成しています…');
+    log('INFO',`パッケージ化開始: ZIP ${zipSize.toLocaleString()} bytes / 保存方式=${useStreamingSave?'保存先指定・チャンク書込':'分割Blob'}`);
+
+    // 現在の実行中iframeのsrcdoc（古いblob: URLを含む可能性）を複製元に持ち込まない。
+    const clonedRoot=document.documentElement.cloneNode(true);
+    const oldPreview=clonedRoot.querySelector('#preview');
+    if(oldPreview){oldPreview.removeAttribute('srcdoc');oldPreview.removeAttribute('src');oldPreview.setAttribute('src','about:blank');}
+    // 保存元の巨大なログ・ファイル一覧・選択状態を含めない。古い実行状態も引き継がない。
+    const cleanLog=clonedRoot.querySelector('#log');if(cleanLog)cleanLog.textContent='[BOOT] ZIP HTML Lab packaged runtime.';
+    const cleanFiles=clonedRoot.querySelector('#filelist');if(cleanFiles)cleanFiles.textContent='パッケージ初期化中';
+    const cleanStatus=clonedRoot.querySelector('#status');if(cleanStatus)cleanStatus.textContent='パッケージを初期化しています…';
+    const cleanSelect=clonedRoot.querySelector('#htmlSelect');if(cleanSelect){cleanSelect.innerHTML='<option value="">ZIPを読み込んでください</option>';cleanSelect.disabled=true;}
+    const cleanZip=clonedRoot.querySelector('#zip');if(cleanZip)cleanZip.value='';
+    clonedRoot.querySelector('#zip-html-lab-package-view')?.remove();
+    clonedRoot.querySelector('#zip-package-boot')?.remove();
+    clonedRoot.querySelector('#zip-html-lab-embedded-zip')?.remove();
+    clonedRoot.querySelector('#zip-html-lab-embedded-loader')?.remove();
+    let html='<!DOCTYPE html>\n'+clonedRoot.outerHTML;
+
+    const packagedTitle=(originalZipName.replace(/\.zip$/i,'')||'ZIP').replace(/[<>]/g,'');
+    const titleEscaped=packagedTitle.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const packageStyle='<style id="zip-html-lab-package-view">html,body{width:100%;height:100%;margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important}body>main{width:100%!important;max-width:none!important;height:100%!important;margin:0!important;padding:0!important}body>main>*:not(.viewer){display:none!important}.viewer{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;overflow:hidden!important;z-index:1!important}#preview{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-height:100%!important;border:0!important;border-radius:0!important;background:#000!important}#zip-package-boot{display:block!important;visibility:visible!important;position:fixed;z-index:2147483647;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,calc(100vw - 28px));padding:20px;background:rgba(10,16,25,.98);color:#fff;border:1px solid #60748d;border-radius:12px;box-shadow:0 18px 70px #000b;font:14px/1.5 system-ui,sans-serif;overflow-wrap:anywhere;white-space:normal}#zip-package-title{font-size:20px;font-weight:700}#zip-package-meter{height:14px;background:#273449;border-radius:9px;overflow:hidden;margin:14px 0 5px}#zip-package-bar{height:100%;width:0;background:#65d4f1;transition:width .12s linear}#zip-package-start{padding:10px 14px;border:1px solid #247b95;border-radius:8px;background:#124e65;color:white;font:inherit;cursor:pointer}#zip-package-start:disabled{opacity:.5}#zip-package-detail{max-height:120px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.4 monospace;color:#b7c8db}#zip-package-boot[hidden]{display:none!important}</style>';
+    html=html.replace(/<title>[\s\S]*?<\/title>/i,'<title>'+titleEscaped+'</title>');
+    html=html.replace(/<\/head>/i,packageStyle+'</head>');
+    // 古いパッケージ由来の要素があれば一旦除去し、挿入位置を一つだけ作る。
+    html=html.replace(/<p id="zip-package-message">ZIPはこのHTMLファイルに埋め込まれています。準備ができたら「起動する」を押してください。</p><div id="zip-package-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="zip-package-bar"></div></div><p id="zip-package-percent">待機中</p><button id="zip-package-start" type="button">起動する</button><pre id="zip-package-detail"></pre></div>';
+    prefix=prefix.replace(/<body([^>]*)>/i,'$&'+bootMarkup);
+    if(!/\n
+
+
+<div id="zip-html-lab-embedded-zip" hidden>data:application/zip;base64,UEsDBC0AAAgAAGxFTV3CXpylnyUAAJ8lAAAFABQAYS5wbmcBABAAAAAAAAAAAAAAAAAAAAAAAEdJRjg5YTwAPACH&#47;wAAAQAAAgAIAQABBAAABAcIBQoEBwIGCgUSBg4FCw4PCQcSCgAWCgsTCxYSDQsLEBINEAwmCQsQDxgbDBQGExQhDAoaDRkZDh4XEQkSEwkgDxwPFRsfERMTFRMyDQ8kECIOGBkIGhkhEiImEhInERsbFg8OGhAdFwsVGhItExAYGiYxEy4QHx8hGSwsGBgRIRI4EzIZHxczFiMrGC8jHRI4FxcYIzIyHR0pIRMWJiVHGBg8GTwUKRRFFkQRKScgJh1CHB4yHzY&#47;HDAyIDw8ISNHHUMkKTkwKBocLSwlKyNNHx9ZHR9BIj5OHzhQIE4TNTZIJiY&#47;J0VZHlY3LyAtMiUlM0hZIlQeOR1WJyZaJEAgNzVBK09OKU09MxpPLCwYPD1fKCYuOCpILlhsKCZkJ2BYLzFIMVVoJmdaLlVGOSFpK0pEOiZTMV9sLi5tKWY1PzBaMFwtP1gkRigiRkdRNmJgNzh8LzAeS0t1MFIyRF6DLy9NQih6NDE9RzhoN2YiT0+IMzIqUy01S2qBNVpwPjyFODhfP3InVFQuUlNaSCtETjknWDFZSTBzPHOKN2QyVVeSOjktXC89UnKSPUBeSmlLVD9+RUaBRYRBWoAtY2JMXEVoVTehQ0M3ZjhqVzM3Y2OpQ0GNTVBTZE1rXj2qQ6KUUlB8XDy3SUqyS0iFVJtYaVE8cnBoYo9oY4VObXVAdkBebFCgV1fETlF7ZkLIUU9jclVYdm2DbUOHZ39FgUOwX2FIfnyoXalzdVvXV1drel11dY&#47;iWV1qgGDbWaWocFfmXVu7aWtRjGBYil+nasNuhWVSi49Vi4mDfa6jdKPtY2bhXt3Lb250i2v1ZGr3ZGWYfax4jWf&#47;ZmXrYuq5dtmkgLnad3jRf225f8n&#47;a7j&#47;ZvblgIGhmXTChtzfhnbHhOuJmtfwg4fOitu4nWT8hoHXit7Ziv&#47;0jIh+rb&#47;&#47;i4zpjfH&#47;ivyJtv3it3vQvImA2IiK09rjxH7jx4yD54iH4+jv0Ij+1oqK&#47;IeE&#47;4aC&#47;&#47;8AAAAh&#47;wtORVRTQ0FQRTIuMAMBAAAAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZU4MUNOmzZg3b1gqZYnBzZY1BZhzV9SoUXM&#47;A6isSejo06MKaqKsuQ3q1aIcppasOQJrmZtOiwpYSrKmAqyEbtosam6ryJpGa0aTG8baXWsoArir6aBsyJrpiloSWtRYALx4A+haC3iv0Vhdi5ZCnNhagMgByP7tWNPY0xECjBK2fNkSkQDpfoIMwACrUbWlA5SCzHlj3NdFwcr+LNd2xgChchcNVTlxAKu+Oz8evs24YsGwf1&#47;EPZyvZWHMi6Z7i7FmLOtFA&#47;zjSkxFu&#47;jpFKtbv2Hg+Hm+6SWyDe&#47;O+XHXT8lqPFtfPIS7YgiALv3ki4i++siC5TL44gMOwfC4C+CN4K7qrqKzUvPPHcrWO+pC9QiJJgAiNnTHLy+uigw4tNz5yUR3vLLQQIdqIko8GWGECsQDZztqxBJ1PMo5GheqKcijyMpPSHcIs6gmS7Dyy0choSgSIZs4yK24msrQUSuaqgoPNZtc2NCLKwmyibYNjZGqxfpWfCgAA6Jj0kQeD&#47;LwTv9Qa6imOvjU0a0i9xS0vjzVDPRQGOsotDdG8TRyLUortfRSTIEqKCAAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLly5UBZM4MAHMgTZwyYcoU4M7nT3cCZrKcSQjoUXcMdKaUidSpzxFLSzZ96rPOUQU1pwaomhOoVJFcf7r4GgACLGFUqN6oozWsl58z46KwVtdarQB1soL9SNWn3L+a7NYNsHcoSJlX4&#47;oNoGqwtZxuOyau6o5QgF+P&#47;ZaRzNHv07bKNIv92znj56eXMw&#47;+zPc0g8pxK40GysH0RdRdqWjmcNS1xQAjYsc1MLgS6cUbc3cNMBgC8tLKoVe+EUA04em&#47;KQboOXxxXU15kQqlle79J5QAbyBPd6d94vLKMpUF6I3UvUT48eHfx28eKPru7Lutovy6Am3AioTybzj+IvJkJrgWfKrBh2Q6ob0AyJLQPs8u9EmoADd0hwgEI5JpnKNcKDA2pU4LoIsJZVLAqAUroDAhwKoqhaYFd7zRoBxFZPBHglYUUsASDzLySKeIZI9J725cEkqkjmgwSCr9u&#47;LJLBlkaMouffsyMjLLNPPM3wICACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNmSYQCYMWO6HBjTwJ599kYZkNky5qZ9QYUKnakSJoahSYfCTAlzlFKo+xgxNQnTQNSoU6iOhGkPq0wcQ&#47;cEKBmAxleZMJeSFak2KAazQg0YsFbXmqoABo4EcJCBLUi3QWMSFWa3btp9fz8GThw4gOG6B2Q2BhwgKc8DRCFbo8I3L+XFlrEm3vxGNFHFGhlHfQw5yWmiHldDbW0YBeygm1Jj&#47;Dw6MSzIPGnvthhglu&#47;EfSDP3keDeEXcUTPEWH6E9fOJ0VkbVqQ9qN+N3pUGtvhlV&#47;Jo7BLFJ81rlzlq1ciD2gsAwZpw9Okhrk8quVLvr8IDSr7G+HMuPP7Y428r3hIcigav8uPoPQLH028&#47;pypEjsGLjMMhAOs0xAq8jAKYIiieIhRxuAbXWjGqNTiMaDaYTnxRQYoGG+6qG9dSD0CoZpmsR8lmBBKrUSRT8UUZFeKrxxd5eiiAAaFcsUmDKLTSNywL0nJLrEq48B&#47;jwFxRt5ccNHO8NNe8Ms204pRzTjrrJC4gACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNkyYQCYMV0ajFmz5syYR&#47;bt5Lnp5sqYPIUKlZkS5pShSXcegYkSplKo+xg1LRnAQNSdjMIlDVA1QFSmNZHyNNB15FeeexiltapJmSaYm6Su2Wc2ZIAMPGc93QnT2t+&#47;T2GOsgsS7c4DMHH0NQA4cIApMMsW7sg3K8xZfQ84thYjwN4AUylzDLBYKIQSPAN04NznKw0IUqlWPgw1wA&#47;OVGrvWzN7Y4DUWAOg4OyZ6+iLlqP6dQxhd1&#47;kFZXbDsB5+k7Qv58ft35Vqe&#47;kGLDuyewtDHCtAKOWR5cYgO74urj&#47;6hbOPuJn+HWrP66vMXR+&#47;ax5I4Ct1vOPBgAjS+K6ocCTbjvq&#47;usvIwbXg89B6dYCcJPgogrHvvYgBDCp3kgDbkT4cABRojRERFG1FR8SIKgX14uRoaCsqjGqL4qiiMawdozwxoOU22MwIY&#47;DEMftYnJAvSShI3KgCvf5EKb3ovTRoQDsifLFLRcKIIEvawzzpTJ3XLKgKtOMao41qXTRTepwPIROM+1rE886X7LpT0ADFXRQmwgKCAAh+QQJAwD&#47;ACwAAAAAPAA8AAAI&#47;&#47;8EDiRY0OBBhAkVLmTY0OFDiBElTqRY0eJFjBk1buTY0eNHkCFFjiRZ0uRJlClVrmTZ0uVLkAFkzpwJ8x&#47;NAJ0iXaH5cmY&#47;oEGD1lQ585hQpEADyUwp82hSqP0yMC0pMypQAzINCKVK0irUAzgDcA3gdSzWs0ADdLDW1hqEsXCnjpT5aujXfgHcuh2LUyTeYz&#47;V7m3bt2fMtGoDRBpK2FqAwAF4lo155epgwgHs3v2IN+orvZmR8uycOGrovabzUuaoGipqvq9ZZ&#47;R8FbY1aa670nadNECtvYp6774YwMTloTH2HuARNevGAIuQK059mXjF3q&#47;ZWnuTfbVG70izwqB67P06Rc3T74oKEMj6bIsB5KgHGjn8+Ym1kcM9&#47;h58eN+mg6+4rehTD7TW9DMwqU4GjE+wBW1zEL3FFIwQKB6IKu4spy6ECjT8IAqgObQANPAwiWqLZKYXPExqxRAVMg4qGOtyUagaRQyvQcZuFCqrCQ8y0ceowmrIQiLVm2shJJMUMEiB2nPyxhiHnPK0IK28MqnJhBTrSzDDFHNMygICACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNnS5UuYMWUKDFDTZk2ZN010inTlpsuaL&#47;oNJVo0kE2VNXkUZVrUQICUNZE1pTo0A1STNasOfRogUFGcJLVWPXBzbD8IWEUqJWrABNFXATpYo6tKK4SuI8&#47;2O1uT7t8OAfgiXcu0b4C&#47;dCsJrhl37deiGZYO9Zv4V4BOPN6G&#47;Sh46+DE1i6&#47;InoV5F6qlf&#47;C8kyUM0fUTVXT1dTatdqNtqvOttZHd78XrzHGbuozdNnUuIf&#47;bhq3VmLig3Nf+ezawN9amKsezU26er+nf5MwoXed+7vrudaiUzZ&#47;HjxiRQG87+7uni+V9ew1BpBjH1lN6j5TzqL8ZCMPrNwCwMe+fjqpLpcBCTyQQbgirKhACjshLKOaIKNwt5+WC+CAD6sTY8OJtDJBqhIFDDGiseLCsMQXHQqAn6IisWm+FpuiB8WFotNxRgprRIjIHrcS7iAkkwTRQpomdPI8IAlqcsrkLLwSSwMjNOtLMMMUc0wx&#47;wkIACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNnS5UuYMWXOVBjA5s0AMm8m2OXPpz8WN13e&#47;FnU5xyhKm0yM9rU3wObKIk6dYooqkmbVP2t+tQUSc6SWZ3iFPvz6sgAP0EUtUnll7JKYtf6Aysyrc+pSJVZ42tNU1qiZz+Wnfq1L19lAR4FrjtYi9kAc0EEOMw3QAIDl&#47;1lDlm2KQHKlT3TbcwxAAutNitbC&#47;DAKGePo1+HPhzgsVHBGmUXRSrtsLQAiJoyy43RtlZ&#47;xGEd&#47;su0KVTTd5EHSHI4s1bYGXfjps1a+tjSFbcXqg261&#47;Kc6eEpjmd7oO&#47;3quonsv+ZuZa1JPDH6tZPVXV&#47;o4jjD7midgngOgI&#47;kU8i+rgjkLSNNHvQp7kILE48ACf0b0EGG9TQJwU5hOgm9D6cEKeLcDJRQwOTmg8wA1b8MLMLGRJLQhknzMFFhwg7LkcNeVzIMxqBZFFIhEZrMYBVjHxwxxoH2m3JDJ3EK8p&#47;2PvkESsJbLGmrro0cskkyTLzTDTTVPNMgQICACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNnS5UuYMWXOpOkwwE2cOW++xOnP50+fOVf2BFo06E6URI0uRWoywFKoP5uOfBrVJ6JVRqeCvBkVhM45RQNQrXpUaoBa1tRaC5DAX1ctY0OW9ffg5qegBtaqvRk3gJa3c+kSuBu0w162f&#47;sG5kr3bdkAMRDHeNr1MVerb5MgpuJ4q0bLUQNQmez4csfQUANs3gvBdI7PF01r1bs39VmOt5kGQKz76EbfYnnbDqsa+OyiqwKIsm019sTgYmtbU4b8d8boQA0EUKYWhfXTGLMDkw1QG3x42ed&#47;wg7z5vxzieOB+jWQWS72APUyk1cPP6LS&#47;d7az7&#47;&#47;ygvwwMfuS089BBNU0CIAG4zKrwehs4tBCS8kUKEAPvkEQwn9eUSo+KSqL0QEcfpvPflQ&#47;OmrDQeia5ebQHDxwARUZCiAZYrKscUbdeQQiaVgDCCrG61ChMDsiExyv+0qlFEnKqu08kosqSQoIAAh+QQJAwD&#47;ACwAAAAAPAA8AAAI&#47;&#47;8EDiRY0OBBhAkVLmTY0OFDiBElTqRY0eJFjBk1buTY0eNHkCFFjiRZ0uRJlClVrmTZ0uVLmDFlzkwYwOZNmTcDSIrXM54RnS1v+iTqE6dKm1WKLo1XxWZKm0ylxntqMupUppiqjryKVRKmogkClOzKVGeAAkS3gizbNU+AH9bkWotqIICEsSHLUr1qc65cFAH4rvUYwEDRoXz&#47;WusjOChbwYgDgFX8F1YAVjbjiIWMtfJcZQEEqc3bcadnv39rYSZdODLW1HNFvTZaWuNeswEWK6Ld861tjKw929D91y5TpxtxM5UUoNbf5Xxv954aAAV0I1KJT&#47;dcGzps7t3jNZpXJPcybOAUo+eWa2AD+ozrzR4IjVp5HPG1qRPdkL6i&#47;KVUCMAG+KajLL&#47;9WlMuwfxy828imwhoMD8CjrIoAAFVmDA&#47;4giDKKoKs9tQPLE8bOiqCkdsUEATFWqLQRWXspChvW46MMbqWjQIt99sGg1HqVg8kcEKb9IQSBkfLEi07n5EMkklBQpAwidjnHHHs7LUcksuu3ysoIAAACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNnS5UuYMWXOpCkxwE2cAWbm5HnzJU5M8YQOjUcAJ8ubCYguFSrBZ8qbkphOlfTU5M2pWYVaHYlVa9Y4Okl6zWqAJ1GnY5caIXrTgKhfYbxWiSc2JNmiZANAsNbXmrAAVZxy&#47;RggTlu9ivz2DWA0590AS3EODaBpsbWbjglzDMw0QB7Koi5jDWCk1eaMeKeehjU68lCjhV9rrfrLtWS7GlVnDdDnNm7Os78GiDGawFTUFHcjN7BYVICgTGPrLvCVcoDFMYQDT03XerwqAWwzmt6OWLfU73WbMz7OO7fFz+nzKrNGpTxRs7olyK8rvvHw9ypaTqvJANTtPq3yGPC6jQJQir&#47;2hguOP&#47;mSm6hACq177CKc9svQOkw2vDCAcspB8MOlwjvKptkC8BDF71Z8iKwEFoSRqCUsPAgvBV280bpmZFxoN81+&#47;CrHAHdEULObNjDSsyQLslGQIp&#47;ELcqBetJySy675PKggAAAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWZNjAJwBaObkyRNmzhbrhAod4pMlTkNDlQ7NqTLnUqhCDeFE+TTqVaolcdK52nVdVpE4RXi9wFMp2JA4veZEYUAtU5IBlr5dNyOAJmt5pak1CjJAAaVT5QrFmdcwBLl9Pw4emopuYcPWwgRIhrNoWsZMARMOENmaKMp8dS7OHBWyYViZi47uWNp058iVSkdBm5Fu19N537h229o11NzWfvyufTHADK9CRcA2fHuoGda2kyaf+ityAANYoxtPzjSG4VoBpkOOtbvx92vDVM4TNr+lO2ED1vZuxmp+&#47;dIGnWPc&#47;2r&#47;PWEUnAPuJv7OCiCV5LazyKr3BBxQo5yi+G8d95ITQEGKjvtqwv+Kk+gtBznEz0OI&#47;hqqABNF9Io2DB0KwAylLAhRRaZaZIi4GWkkcaHzWEyRRqXosFGh+1bL8b8LPxzPK66APOvDnqKUckoqpWwoIAAh+QQJAwD&#47;ACwAAAAAPAA8AAAI&#47;&#47;8EDiRY0OBBhAkVLmTY0OFDiBElTqRY0eJFjBk1buTY0eNHkCFFjiRZ0uRJlClVrmTZ0uVLmDFlzqRZ06bJADlz0tTZU2dMnS3WDR065CdLnYaILi16FGXOAkylDnVaMudUrFQD4AyQNauhnSOvZk3VUyjRsCLHTjUawAAKA2vXbVXbleiMtW6t7bVGJUAqMz3VRkWbVxPfvQHwCgYpd25eVYit+TQa0nGUAITL1pKcE2xXuh4dSwWrrLNdtB9HM6UTQNpppmk3Bhjilaoo2LFDa0TtNUCYzgKkttiNcbXUAB0Q1wqgFHlxi8d1I07Se2ng2daxFgiAWLrs6Nqx6oFNLCIr+IrSmXL&#47;ZU2a+MK84U&#47;NaS3G&#47;MfZbRNtjQJ&#47;&#47;ox02o8oAdQD8CKfBtTKNvQkGou4KBRcZwuvEmkQIrkMlBAH6CIajTsJfevwoZwSmQrEEMcL77zMUnwuPfwagMpFopwJQACKNCxwRhcXuHAhDZsK8kUHfTLySCST9OmhgAAAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWdPmzZYBdO4MMJPnz50udyKAV9QovEs8V+482tSoAJ0omTqlWjRqSZ0Cqm6Fd3VkAK1cq0IlqVNsgZ9HvX402&#47;TSUahJNGmK0bbRWo8BCjRFi8ZoAAjWBFuDFcCPCL09QwZwOrVrpcGCAyD4CTJAkMZ6&#47;4qKbA2o4o5tuSat1Vl0V9AbT1e9K8w0Y6No874Ve&#47;fX66Z4L67eGgBy5NVMUmPkXTUAFdN7cw+3aFjsXwORRQWgfVR2xuLGA0Sua1xjdqpJgcOMbvyd&#47;POunK3VCsDEO3bM6IsKF2zgfO7vjeT&#47;RaFMM9XrdnNuP3igOuA+tZibSKcZCLQKPN0WBI8rBI0SDrsAuAgADgfhsaA3BSNqSzjlOqQqQohOmyGABk10K8SHePNDpw9dLOqu3dw7kacC4iMwqeYqPMoP+xzbD8WGAhDBRvmQXOgzKKOUEiiIAgIAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWdPmTZw5bQbg2dMnTJ9c4A29VKBnS54fhi5luvQoSp5NpTLlCTXAVKxDq5aMmjXrVpE8G3mF17MAUzhgQQY4m9Woz6tOA4SNK3epnwAorO21BuGqUaMhu1INIEBrAL58r&#47;5cG0Qqz7Y8E+9dzLjjYKZG5U62FuCSiKtM5noMIIJsWcSTPRO+XNerZNVNL43eiPlr6sSuD3MMMPY07NyPaWfUnRX0ZGXFUWtke9pppcQx2jZVa3G187IGcl+aWr2i8qwGcHdyxuqdIvivMfaGAW9+IvryAWp1bj&#47;8O&#47;z4lQL4iU&#47;c9unZ&#47;htKA&#47;vO66ka7JYyyrHuCoSIJx8QRA0&#47;qSz4yroAQmjKh54SfO0+CYXr6Q4PqfvukNNCgCsTD2cz0ENtBPQKrxdLtLGs9+DScUcee9SxoYAAACH5BAkDAP8ALAAAAAA8ADwAAAj&#47;&#47;wQOJFjQ4EGECRUuZNjQ4UOIESVOpFjR4kWMGTVu5NjR40eQIUWOJFnS5EmUKVWuZNnS5UuYMWXOpFnT5k2cOXXuDNDTp0+YPld8I1oU2s+VPp0UZcrUCtCTPQs0pcrUTU+TPYdW5UoUK8kARbqO&#47;fY1ZIAGZL+RKhDgQ1MBAUT2VPuzJwKmZjv2tEI1QN4AiqxZk3YgAKmy3+J+pOu3cVkqgyXbLSuXo9aqPosGeCN5cM+4f&#47;VmfOw3r2DPBkR7tayxNNkAlTxbU+20Nempar2Kmv16dMXXsFFP&#47;guYdPCxAX70Ll50MUbNull7lhZgR9Onx5vr7um5z3aipG4DkUfe9WktybWb7hg&#47;McCK8l0DGCBOtS30b2TAq20rzZqoAPpq6reIGgtAAOk2ow85Ah2K7psLAlgqQfiECcCCzMjLbbP9YEPuPol6uoAr+DqUTyzHQjQRsOt0e4sqC9pjKL6mEACNjASNg4ivHG20ywIUPSxwwxy&#47;cSO0nqCpS8aEaCxStwh3tGtKKqu0skqGAgIAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWdPmTZw5A+zcSZPnT6AueRYg882oUWgIfqrkedTpU6MFeprceQHqVadTR+7cgdXrtx1aQe5c8fWr0q0FzH6TyrNI1gAhd67d+aMPlZ0fjrqJ+3Eu1L&#47;frATQZM2wNQMBvs0VuzEw3KM7Dxt+o3gnqcYZA6i9GljyZGEB+CqG1texYqyk4E42HGCHaqOZK+6EtjZ2ANbWAliBe9r2bda&#47;AsA2usL0xZ0Ifi&#47;GPVkV6t4YLy83zroP9MjHKTZdjrnW5MSAtU+S3IzddoAOkzeLR255OXDDsIazt8jYwnu+hyGYv4289uPz3miNv8XqC+C+2MrqLgBl8LpKqtkeE2C+5X7qbDyHyBLvvSJ2cgOq0jBciLsL3wOwv4hOvJDC97JLkUCswuJJuRZlS0jFtSwACsenRESIxBaPIsWJD3ijy8eCeAyyQiQHAnLJJW1Mckcqq7Tyyh0VCggAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWdPmTZsBdO7kCZMngizevOEh0XPlTgRClS711mRnSp0CmE5V+tSkTqpZqwYoiVWrUDxTB+kc6TWrDJ4BpCoVwDWkWaFqHC3VqegXrA4BwIYl+1FnWKVZzI61VrhwkgCOsPbtqLMJ052PvcmAYLiwqgAIdJKY4LYxialF9QolgcJy4QCCA6jx5nlj5qywhSL4cdqaXgEFhDLOCPdrgDC2Ryst4Pri3690qQifarzizuRLhRxgDlkj9OhCCVsWNXwrxp0TslezPY0iKdOi4HXKGL&#47;7dGKxziWuDsC+fYA3lr3TPa5X9vi2pCnsh&#47;2qskgn1nyLLgDqbitwt+e8cqq92QJQ5A34plJDPofg+m88nrJqayKdzlNKMwp3C0Cy5kgMQLfmhEgRraw2jAi72MSj0ETIOEQoquQ0WyvF5nw06MX2ikOSSBU7rI&#47;ItnYiIaj7jBwIRybTepAq3n5UkEkiuzzoSzBTFLMgMsukUAgrtXTzTTjjjPOggAAAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWdPmzAA5de6EuVMIHm&#47;e8JDguVIngqBJlXorejKngKVRk+p0GkCNVKzeCuQsGQBp1qBAlw7iKjInWBk7rSoVEMBsgKVqHCVNG0DRL1hnhQJ1CzKn2KBZ9DINYM2w4ZyOzvb1mLPJUp2PmUI4jNhrThITGG&#47;EHJUo3KABUFS2ZiCA4LWbM+b8GtXr1B+kk8AVUCB0x8FgmVIh&#47;QP0VNUWc+sOwLsyhN+hg1PMOUG30gAHSJteKmT5xOHEC1fOXlZ4drA5Sb+zhnwdos7nSjVXFhVgbnmMVpOnD&#47;DmcIz5yi8uTg99uzXwvMMuNcD6iw4xrASMCD1vmshPNwTseuNBwpjLjcLwcrpKKgUdYhC4&#47;vzDiiiJdDojKgeFCDGotBI0D6EPXQvAuRVbg++hGKWKEKoVE8QxpxOfq8vGHr2J0MMAeiiyLZ1IyGLFFwkCL0QH1TKwoSmLLDJKgbLUEsoovfwyxA6lDECKMdOcSiG12nTzTTjjVMuggAAAIfkECQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc6kWfNlAJw5ccbUibOCgJ4uc2K5VtRo0RQ5VeY8ddSpUSU7T+JU8NSqUakkcSq52vVa1pA4vX7teVRBAJFinQY4ilORNWuV1LJFCxLniLVqv76Fa00UXZ0fqT7NWRRMAGV9rUkLEDVwR5wCrBa+FlUx3ABAcQKpy1Hv0wpGawS4bE1saLKe2Y5FSvryZ7AXP49l4FrxZ6AbG7M2eipArdcp8maczToAX7iwAjRt27kiZd5FA&#47;xQnGR1c4zQo+O8fd1o0uxRoxuhPSutb+antJxPFOt9Owq4fyFNlk2X+Xic5otLtzjXPW+c+giAFqvAe+66AIQbT7r9UqMIt&#47;9Y4wyIq2J7CCcO8lpQuqtGe3C&#47;BruqocL1HNJOww0nK5EhnBgYK8TtVlwIJzB4A0qyFBmEaLAFz6LKjgVlPCgnAnM8TKftTIQxRwBNxJFJKIUkKICqoLTSwoKWtNI4Kf&#47;p6UswwxRzzMcGCggAIfkEAQMA&#47;wAsAAAAADwAPAAACP&#47;&#47;BA4kWNDgQYQJFS5k2NDhQ4gRJU6kWNHiRYwZNW7k2NHjR5AhRY4kWdLkSZQpVa5k2dLlS5gxZc4EGcBmgJk3b1YQoBNny5tYnl0jWvRaoZsqb&#47;Ix2rSoEpspAyhwWpWor6glbSqx2vVa1pE2vWLRWcMo2JoBmvoyqsAmhBgGAgi4OgktR5sjmt4kaleRNcDWRAWwa5PBz442qe4Vew1MAGWBrUkLANUmJ8QbbdJ1yvcaVMmA5&#47;LNrLGx02IVihGtESC0NZvTKrC9e&#47;G012spXIe+&#47;RgvW9xED7++&#47;ay0xdu4H0eWHGDCXs1qgxPFLIo3EMYZbWKfTjTAD8lJAkzqy47RJpju3neLlm5Ut&#47;YAWNJfcyst8FynSM1vni8rAIr72nDKrv2SC84m+2ppzygCbfPgsfmu8c8AawxgoCqobAtgia9kiVA3KgIYyqmeHCTKP04iBMJA9ZALIJiibFptvgD0quq4iAK4sKhiZJxvGvKcagPHh2w6pSnMCIvwRiIbsgmSqnoMwKwli8KqIpt08KqnAGZc8j2JbvKyq8ICEDDC2hbSaT63fBqzqzQT8qzKa4qRJcXp4jzIpgjopFNPg1j0M88mCxJ00OB0KJSgAOxAtMpTFhXo0EdxA3RSnzLVdFNOO02KoIAAADtQSwMELQAACAgAYzlJXWLMRv+nAAAA1AAAAAoAFABpbmRleC5odG1sAQAQAAAAAAAAAAAAAAAAAAAAAACzUXTxdw6JDHBVyCjJzbHjsgFRCjmJeem2SlmJSiCB1MQUOy4FBQUFm9zUkkSF5IzEouLUElul0BA3XQslqFRJZklOqt3zKbufNvc&#47;blz3YuGK50t22ehDhLls9CGm2CTlp1TacUG0KOrqKkA1NE2CaHjcOPNxU&#47;fjpv2PmzYo6OpCzc7MTVcoLkq2VUrUK8hLV1JIzCmxVYLoBLmQy0YfYqyNPsQPAFBLAQIAABQAAAgAAGxFTV3CXpylnyUAAJ8lAAAFAAAAAAAAAAAAAAAAAAAAAABhLnBuZ1BLAQIAABQAAAgIAGM5SV1izEb&#47;pwAAANQAAAAKAAAAAAAAAAEAAAAAANYlAABpbmRleC5odG1sUEsFBgAAAAACAAIAawAAALkmAAAAAA==</div>
+<script id="zip-html-lab-embedded-loader">(function(){
+function start(){var node=document.getElementById("zip-html-lab-embedded-zip"),box=document.getElementById("zip-package-boot"),msg=document.getElementById("zip-package-message"),bar=document.getElementById("zip-package-bar"),meter=document.getElementById("zip-package-meter"),pct=document.getElementById("zip-package-percent"),btn=document.getElementById("zip-package-start"),detail=document.getElementById("zip-package-detail");function show(t){if(msg)msg.textContent=t;}function detailLog(t){if(detail)detail.textContent+=t+"\n";console.info("[ZIP HTML Lab package] "+t);}function setProgress(n,t){n=Math.max(0,Math.min(100,n));if(bar)bar.style.width=n+"%";if(meter)meter.setAttribute("aria-valuenow",String(Math.round(n)));if(pct)pct.textContent=Math.round(n)+"%";if(t)show(t);}
+if(!node||!btn){var missing=[];if(!node)missing.push("内蔵ZIPデータ(#zip-html-lab-embedded-zip)");if(!btn)missing.push("開始ボタン(#zip-package-start)");show("起動失敗: "+missing.join("、")+" が見つかりません。HTML構造を確認してください。");detailLog("DOM検出失敗: node="+!!node+", button="+!!btn+", readyState="+document.readyState);return;}window.__ZIP_HTML_LAB_BOOT_PROGRESS__=setProgress;btn.addEventListener("click",async function(){btn.disabled=true;setProgress(1,"ZIPを展開中：ZIPデータの復元を開始しています…");detailLog("ユーザー操作を確認。ZIP復元を開始");try{await new Promise(function(r){setTimeout(r,25);});var raw=node.textContent,prefix="data:application/zip;base64,";if(raw.slice(0,prefix.length)!==prefix)throw new Error("埋め込みZIPがData URL形式ではありません");var start=prefix.length,end=raw.length;while(end>start&&/\s/.test(raw.charAt(end-1)))end--;var b64Length=end-start;if(!b64Length||b64Length%4!==0)throw new Error("Base64の長さが不正です: "+b64Length);var decodedLength=Math.floor(b64Length*3/4);if(raw.charAt(end-1)==="=")decodedLength--;if(raw.charAt(end-2)==="=")decodedLength--;var decoded=new Uint8Array(decodedLength),step=1024*1024,outOffset=0;for(var i=start;i<end;i+=step){var stop=Math.min(i+step,end);if(stop<end&&((stop-start)%4)!==0)stop-=((stop-start)%4);var chunk=raw.slice(i,stop).replace(/\s/g,"");if(!chunk.length)continue;var bin=atob(chunk);for(var j=0;j<bin.length;j++)decoded[outOffset++]=bin.charCodeAt(j);setProgress(2+Math.min(1,(stop-start)/b64Length)*7,"ZIPデータを復元中… "+Math.round((stop-start)/b64Length*100)+"%");await new Promise(function(r){setTimeout(r,0);});}if(outOffset!==decodedLength)throw new Error("Base64復元サイズ不一致: "+outOffset+"/"+decodedLength);if(decoded.byteLength<4)throw new Error("復元されたZIPが短すぎます: "+decoded.byteLength+" bytes");var head=decoded.subarray(0,4);if(!(head[0]===80&&head[1]===75&&(head[2]===3&&head[3]===4||head[2]===5&&head[3]===6||head[2]===7&&head[3]===8)))throw new Error("ZIPシグネチャ不一致: "+Array.from(head).map(function(x){return x.toString(16).padStart(2,"0")}).join(" "));detailLog("ZIP復元成功: "+decoded.byteLength+" bytes / signature="+Array.from(head).join(","));setProgress(10,"ZIPデータ復元完了。ZIPを展開・検証中…");var f={name:"Archive.zip",size:decoded.byteLength,_embedded:true,arrayBuffer:async function(){return decoded.buffer;}};if(typeof window.__zipHtmlLabImportFile!=="function")throw new Error("ZIP取込関数が見つかりません");var ok=await window.__zipHtmlLabImportFile(f,true);if(ok!==true)throw new Error(window.__zipHtmlLabLastError||"ZIP展開またはHTML起動に失敗しました");setProgress(100,"HTMLの読み込みが完了しました。実行画面を表示します。");detailLog("ZIP展開・検証・HTML iframe load 完了");if(btn)btn.style.display="none";if(box){box.style.position="fixed";box.style.left="10px";box.style.right="10px";box.style.top="10px";box.style.transform="none";box.style.width="auto";box.style.padding="10px 14px";}setTimeout(function(){if(box)box.style.display="none";},1200);}catch(e){setProgress(Number(pct&&pct.textContent.replace("%",""))||0,"失敗: "+(e&&e.message||e));detailLog("ERROR: "+(e&&e.stack||e));if(btn){btn.disabled=false;btn.textContent="もう一度試す";}if(box)box.style.borderColor="#ff9292";}});}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start,{once:true});else start();})();</script>
+</body></html>
